@@ -1,0 +1,3816 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rekyl Data Viewer</title>
+<style>
+  :root {
+    --sidebar-width: 260px;
+    --bg: #f5f6fa;
+    --sidebar-bg: #1e2130;
+    --sidebar-text: #c1c4d6;
+    --sidebar-active: #3b82f6;
+    --card-bg: #fff;
+    --border: #e2e5f1;
+    --text: #1e2130;
+    --text-muted: #6b7294;
+    --tab-bg: #eef0f7;
+    --tab-active: #3b82f6;
+    --tab-active-text: #fff;
+    --hover-row: #f0f4ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  body.sidebar-collapsed #sidebar {
+    width: 0;
+    min-width: 0;
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 20;
+    transition: width 0.28s ease, min-width 0.28s ease, transform 0.28s ease, opacity 0.2s ease;
+    will-change: transform, width;
+  }
+
+  #sidebar-header {
+    padding: 20px 16px 12px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    letter-spacing: 0.5px;
+  }
+
+  #sidebar-search {
+    margin: 12px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+  }
+  #sidebar-search::placeholder { color: rgba(255,255,255,0.35); }
+  #sidebar-search:focus { border-color: var(--sidebar-active); }
+
+  .nav-list { list-style: none; flex: 1; overflow-y: auto; padding: 4px 0; }
+
+  .nav-item {
+    padding: 9px 16px;
+    cursor: pointer;
+    font-size: 13.5px;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 3px solid transparent;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .nav-item.active {
+    background: rgba(59,130,246,0.12);
+    color: #fff;
+    border-left-color: var(--sidebar-active);
+    font-weight: 600;
+  }
+  .nav-item .nav-id {
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    min-width: 22px;
+  }
+
+  /* Make nav items actual links so they can open in new tabs */
+  .nav-item a {
+    color: inherit;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  .nav-item a:hover { color: #fff; }
+
+  /* Main area */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Sidebar collapse handle */
+  #sidebar-handle {
+    position: fixed;
+    top: 50%;
+    left: calc(var(--sidebar-width) - 4px);
+    transform: translateY(-50%);
+    width: 8px;
+    height: 74px;
+    border-radius: 0 8px 8px 0;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    cursor: pointer;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: left 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+  }
+  #sidebar-handle:hover {
+    border-color: var(--sidebar-active);
+  }
+  #sidebar-handle .dots {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  #sidebar-handle .dots span {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.75;
+  }
+
+  body.sidebar-collapsed #sidebar-handle {
+    left: 0;
+    background: var(--card-bg);
+    color: var(--text-muted);
+    border-color: var(--border);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+  }
+
+  #topbar {
+    padding: 16px 24px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  #topbar h1 { font-size: 20px; font-weight: 700; }
+  #topbar .subtitle { font-size: 13px; color: var(--text-muted); }
+
+  /* Content area */
+  #content {
+    flex: 1;
+    overflow: auto;
+    padding: 20px 24px;
+  }
+
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    gap: 12px;
+  }
+  .welcome svg { width: 64px; height: 64px; opacity: 0.3; }
+  .welcome p { font-size: 15px; }
+
+  /* Toolbar row */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .focus-tools-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+  }
+  .focus-tools-btn {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--card-bg);
+    cursor: pointer;
+  }
+  .focus-tools-btn:hover { background: var(--tab-bg); }
+  .focus-tools-btn.active {
+    border-color: var(--sidebar-active);
+    color: #0f4fbf;
+    background: #eef5ff;
+  }
+  .focus-tools-panel {
+    margin: 0 0 10px;
+  }
+  .focus-tools-panel.hidden {
+    display: none;
+  }
+  .focus-tools-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 2px;
+  }
+  .saved-views-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fbfcff;
+  }
+  .saved-views-wrap input,
+  .saved-views-wrap select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--card-bg);
+  }
+  .saved-views-wrap input { min-width: 180px; }
+  .saved-views-wrap select { min-width: 220px; }
+  .saved-views-wrap button {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--card-bg);
+    cursor: pointer;
+  }
+  .saved-views-wrap button:hover { background: var(--tab-bg); }
+  .saved-views-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 120px;
+  }
+  .batch-assign-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+  .batch-salesman-select {
+    min-width: 240px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 13px;
+  }
+  .batch-assign-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .batch-assign-btn:hover { background: var(--tab-bg); }
+  .project-import-btn {
+    padding: 6px 12px;
+    border: 1px solid #c7d9f7;
+    border-radius: 6px;
+    background: #eef5ff;
+    color: #1f4f99;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .project-import-btn:hover { background: #e1eeff; }
+  .project-import-mode {
+    min-width: 180px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 13px;
+  }
+  .batch-progress {
+    width: 180px;
+    height: 14px;
+    display: none;
+  }
+  .batch-status {
+    color: var(--text-muted);
+    font-size: 12px;
+    min-width: 120px;
+  }
+  .select-col, .row-select {
+    width: 34px;
+    text-align: center;
+    text-overflow: revert;
+  }
+  .row-checkbox {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+  }
+  .toolbar .row-count {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  #table-search {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    width: 260px;
+    outline: none;
+  }
+  #table-search:focus { border-color: var(--sidebar-active); }
+
+  /* Column picker button & dropdown */
+  .col-picker-wrap { position: relative; }
+
+  .col-picker-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .col-picker-btn:hover { background: var(--tab-bg); }
+  .col-picker-btn svg { width: 15px; height: 15px; }
+
+  .col-picker-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 100;
+    min-width: 260px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .col-picker-dropdown.open { display: block; }
+
+  .col-picker-dropdown .cp-header {
+    padding: 8px 14px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+  .col-picker-dropdown .cp-header a {
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--sidebar-active);
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 11px;
+  }
+  .col-picker-dropdown .cp-header a:hover { text-decoration: underline; }
+
+  /* Export button & dropdown (styled like column picker) */
+  .export-wrap { position: relative; }
+
+  .export-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .export-btn:hover { background: var(--tab-bg); }
+  .export-btn svg { width: 15px; height: 15px; }
+
+  .export-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 100;
+    min-width: 260px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .export-dropdown.open { display: block; }
+
+  .export-dropdown .export-header {
+    padding: 8px 14px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+  }
+
+  .export-dropdown .export-section { padding: 8px 12px; display:flex; flex-direction:column; gap:6px; }
+  .export-dropdown .export-action {
+    padding: 8px 10px;
+    text-align: left;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    border-radius: 6px;
+  }
+  .export-dropdown .export-action:hover { background: var(--hover-row); }
+
+  /* Join-local column highlight */
+  .join-local-highlight {
+    background: rgba(59,130,246,0.12) !important;
+  }
+
+  .col-picker-item {
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: default;
+    font-size: 13px;
+    transition: background 0.1s;
+    user-select: none;
+  }
+  .col-picker-item:hover { background: var(--hover-row); }
+  .col-picker-item input { margin: 0; cursor: pointer; accent-color: var(--sidebar-active); }
+  .col-picker-item.dragging-cp { opacity: 0.4; }
+  .col-picker-item.drag-over-cp { border-top: 2px solid var(--sidebar-active); }
+
+  /* Drag handle in column picker */
+  .cp-drag-handle {
+    cursor: grab;
+    color: #bbb;
+    font-size: 14px;
+    line-height: 1;
+    margin-right: 2px;
+  }
+  .cp-drag-handle:active { cursor: grabbing; }
+
+  /* Table */
+  .table-wrapper {
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow: auto;
+    max-height: calc(100vh - 260px);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    table-layout: fixed;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  th {
+    background: #f0f2f8;
+    padding: 0;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Column resize handle */
+  .col-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 3;
+  }
+  .col-resize-handle:hover,
+  .col-resize-handle.active {
+    background: var(--sidebar-active);
+    opacity: 0.5;
+  }
+
+  .th-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .th-label {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px 6px;
+    cursor: pointer;
+    gap: 4px;
+  }
+  .th-label:hover { background: #e4e7f0; }
+
+  .th-label .sort-arrow { font-size: 10px; opacity: 0.4; }
+  th.sorted .th-label .sort-arrow { opacity: 1; color: var(--sidebar-active); }
+
+  /* Per-column filter input */
+  .col-filter {
+    padding: 0 6px 6px;
+  }
+  .col-filter input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+    background: #fff;
+    color: var(--text);
+  }
+  .col-filter input:focus { border-color: var(--sidebar-active); }
+  .col-filter input.has-value {
+    border-color: var(--sidebar-active);
+    background: #f0f6ff;
+  }
+  .col-filter select {
+    width: 100%;
+    padding: 3px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .col-filter select:focus { border-color: var(--sidebar-active); }
+  .col-filter select.has-value {
+    border-color: var(--sidebar-active);
+    background: #f0f6ff;
+  }
+
+  /* Drag-and-drop: header cell */
+  th.drag-over-left { box-shadow: inset 3px 0 0 var(--sidebar-active); }
+  th.drag-over-right { box-shadow: inset -3px 0 0 var(--sidebar-active); }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  tr:hover td { background: var(--hover-row); }
+
+  .empty-data {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    color: var(--text-muted);
+    gap: 10px;
+  }
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--sidebar-active);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-msg {
+    padding: 20px;
+    background: #fff0f0;
+    border: 1px solid #fcc;
+    border-radius: 8px;
+    color: #c00;
+    font-size: 13px;
+  }
+
+  .component-params {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: #f8f9fc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .component-params strong { color: var(--text); }
+
+  /* Clear column filters button */
+  .clear-filters-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    border: 1px solid #f0c0c0;
+    background: #fff5f5;
+    color: #c44;
+    border-radius: 5px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    gap: 4px;
+  }
+  .clear-filters-btn.visible { display: inline-flex; }
+  .clear-filters-btn:hover { background: #ffe8e8; }
+
+  /* Join panel */
+  .join-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .join-btn:hover { background: var(--tab-bg); }
+  .join-btn svg { width: 15px; height: 15px; }
+  .join-btn.has-joins { border-color: var(--sidebar-active); color: var(--sidebar-active); }
+
+  .join-panel {
+    display: none;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .join-panel.open { display: block; }
+
+  .join-panel h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .join-config {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr auto;
+    gap: 8px;
+    align-items: end;
+    margin-bottom: 12px;
+  }
+  .join-config label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .join-config select, .join-config input {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+    outline: none;
+    background: #fff;
+    color: var(--text);
+    width: 100%;
+  }
+  .join-config select:focus, .join-config input:focus { border-color: var(--sidebar-active); }
+  .join-config button {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .join-add-btn {
+    background: var(--sidebar-active);
+    color: #fff;
+  }
+  .join-add-btn:hover { opacity: 0.9; }
+  .join-add-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .active-joins { margin-top: 8px; }
+  .active-join-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #f0f6ff;
+    border: 1px solid #c8dcf8;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .active-join-item .join-desc { flex: 1; }
+  .active-join-item .join-desc strong { color: var(--sidebar-active); }
+  .active-join-item .join-cols { color: var(--text-muted); margin-left: 8px; }
+  .join-edit-btn {
+    padding: 3px 8px;
+    border: 1px solid #abd;
+    background: #f0f6ff;
+    color: var(--sidebar-active);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    margin-left: 8px;
+  }
+  .join-edit-btn:hover { background: #dbe8fa; }
+  .join-remove-btn {
+    padding: 3px 8px;
+    border: 1px solid #daa;
+    background: #fff5f5;
+    color: #c44;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .join-remove-btn:hover { background: #ffe8e8; }
+  .join-cancel-btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--card-bg);
+    color: var(--text);
+  }
+  .join-cancel-btn:hover { background: var(--tab-bg); }
+  .active-join-item.editing {
+    border-color: var(--sidebar-active);
+    background: #e0edff;
+  }
+  .join-btns { display: flex; align-items: center; gap: 0; }
+
+  .join-col-picker {
+    margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    background: #fafbfd;
+  }
+  .join-col-picker label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 3px 4px;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    color: var(--text);
+  }
+  .join-col-picker label:hover { background: var(--hover-row); }
+  .join-col-picker input { accent-color: var(--sidebar-active); }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .pagination button {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .pagination button:hover { background: var(--tab-bg); }
+  .pagination button:disabled { opacity: 0.4; cursor: default; }
+  .pagination .page-info { font-size: 13px; color: var(--text-muted); min-width: 100px; text-align: center; }
+
+  .rows-per-page {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .rows-per-page input {
+    width: 70px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: center;
+    outline: none;
+    color: var(--text);
+  }
+  .rows-per-page input:focus { border-color: var(--sidebar-active); }
+  .clear-cache-btn {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .clear-cache-btn:hover { background: var(--tab-bg); }
+  .backup-idb-btn {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .backup-idb-btn:hover { background: var(--tab-bg); }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">Rekyl Viewer</div>
+  <input type="search" id="sidebar-search" placeholder="Sök layout..." autocomplete="off">
+  <ul class="nav-list" id="nav-list"></ul>
+</div>
+
+<button id="sidebar-handle" type="button" aria-label="Växla sidomeny" aria-expanded="true" title="Visa/Dölj sidomeny">
+  <span class="dots"><span></span><span></span><span></span></span>
+</button>
+
+<div id="main">
+  <div id="topbar">
+      <div>
+        <h1 id="page-title">Rekyl Data Viewer</h1>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="subtitle" id="page-subtitle">Välj en layout i sidomenyn</div>
+          <button id="backup-idb-btn" class="backup-idb-btn">Ladda ner backup</button>
+          <button id="restore-idb-btn" class="backup-idb-btn">Återställ backup</button>
+          <input id="restore-idb-file" type="file" accept="application/json,.json" style="display:none;" />
+          <span id="backup-idb-status" style="font-size:12px;color:var(--text-muted);display:none;margin-left:6px;"></span>
+          <button id="clear-cache-btn" class="clear-cache-btn">Rensa cache</button>
+          <span id="cache-status" style="font-size:12px;color:var(--text-muted);display:none;margin-left:6px;">Cache rensad</span>
+        </div>
+      </div>
+  </div>
+  <div id="content">
+    <div class="welcome">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+      </svg>
+      <p>Välj en layout i menyn till vänster för att visa data</p>
+    </div>
+  </div>
+</div>
+
+<script>
+
+  onmessage = (evt) => {
+    console.log('message received', evt)
+    if (evt.origin === "https://app.rekyl.nu") {
+      const port = evt.ports[0]
+
+      globalThis.topFetch = async (url, body = {}, transfer = []) => {
+        const q = Promise.withResolvers()
+        const mc = new MessageChannel()
+        mc.port1.onmessage = (evt) => {
+          const { body, ...rest } = evt.data
+          let response = new Response(body, rest)
+          // "text/html; Charset=iso-8859-1"
+
+          // get charset
+          const customCharset = response.headers.get('content-type')?.match(/charset=([^;]+)/i)?.[1]
+          if (customCharset) {
+            response = new Proxy(response, {
+              get(target, prop) {
+                if (prop === url) {
+                  return rest.url
+                }
+                if (prop === 'text' || prop === 'json') {
+                  return async () => {
+                    const bytes = await target.arrayBuffer()
+                    const decoder = new TextDecoder(customCharset)
+                    const decoded = decoder.decode(bytes)
+                    return prop === 'json' ? JSON.parse(decoded) : decoded
+                  }
+                }
+                return Reflect.get(target, prop)
+              }
+            })
+          }
+          q.resolve(response)
+        }
+        port.postMessage([url, body], [mc.port2, ...transfer])
+        return q.promise
+      }
+
+      loadLayouts().then(async () => {
+        // Try to restore state from URL query params
+        const restored = await restoreFromURL();
+        if (!restored && location.hash) {
+          // Legacy hash-based navigation
+          const hash = location.hash.slice(1);
+          const layout = state.layouts.find(l => l.name === hash);
+          if (layout) selectLayout(layout);
+        }
+      });
+    }
+  }
+
+const state = {
+  rowsPerPage: 100,
+  layouts: [],
+  currentLayout: null,
+  currentLayoutDetail: null,
+  currentTab: null,
+  componentData: null,
+  componentMeta: null,
+  allColumns: [],
+  columnOrder: [],
+  hiddenColumns: new Set(),
+  columnFilters: {},
+  columnWidths: {},
+  joins: [],        // Array of { layoutName, componentId, localKey, remoteKey, remoteCols, remoteData, remoteMeta }
+  joinCache: {},    // Cache: "folder/componentId" -> { data, meta }
+  selectedRows: new Set(),
+  sortKey: null,
+  sortAsc: true,
+  searchTerm: '',
+  page: 0,
+};
+
+// API layout/tab cache to avoid repeated calls
+const apiCache = {
+  layouts: null,           // Array of layouts
+  details: {},             // layoutName -> layoutDetail
+  componentToTab: {},      // componentId -> { layoutName, tabId }
+};
+
+const API_BASE = 'https://api.rekyl.nu/8399/v1/ui';
+const LOCAL_LAYOUTS = [
+  { id: 'local-projects', name: 'idb_projects', title: 'Imported Projects (IndexedDB)', _localStore: 'projects' },
+  { id: 'local-orders', name: 'idb_orders', title: 'Imported Orders (IndexedDB)', _localStore: 'orders' },
+];
+
+function getLocalLayoutByName(name) {
+  return LOCAL_LAYOUTS.find(l => l.name === name) || null;
+}
+
+function buildLocalLayoutDetail(layoutName) {
+  const local = getLocalLayoutByName(layoutName);
+  if (!local) return null;
+  return {
+    rows: [
+      {
+        columns: [
+          {
+            tabs: [
+              {
+                id: layoutName,
+                componentId: layoutName,
+                component: local.title,
+                parameters: { source: 'indexeddb' }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+// Simple IndexedDB key-value helpers (rekyl_live_db / kv)
+function openIdb() {
+  return new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open('rekyl_live_db', 3);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('orders')) db.createObjectStore('orders', { keyPath: 'id' });
+      };
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror = (e) => reject(e.target.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function idbGet(key) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const store = tx.objectStore('kv');
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
+async function idbSet(key, value) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      const store = tx.objectStore('kv');
+      const req = store.put(value, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+async function idbPutProject(project) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readwrite');
+      const store = tx.objectStore('projects');
+      const req = store.put(project);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+async function idbHasOrder(orderId) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('orders', 'readonly');
+      const store = tx.objectStore('orders');
+      const req = store.get(Number(orderId));
+      req.onsuccess = () => resolve(!!req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+async function idbPutOrder(order) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('orders', 'readwrite');
+      const store = tx.objectStore('orders');
+      const req = store.put(order);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+async function idbGetAll(storeName) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return [];
+  }
+}
+
+async function idbHasProject(projectId) {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readonly');
+      const store = tx.objectStore('projects');
+      const req = store.get(Number(projectId));
+      req.onsuccess = () => resolve(!!req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+async function idbClear() {
+  try {
+    const db = await openIdb();
+    return await new Promise((resolve, reject) => {
+      const stores = ['kv'];
+      const tx = db.transaction(stores, 'readwrite');
+      for (const storeName of stores) {
+        tx.objectStore(storeName).clear();
+      }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+async function getLayoutsCached() {
+  if (apiCache.layouts) return apiCache.layouts;
+  const cached = await idbGet('layouts');
+  if (cached) {
+    apiCache.layouts = cached;
+    return cached;
+  }
+  const res = (typeof globalThis.topFetch === 'function')
+    ? await globalThis.topFetch(`${API_BASE}/layouts/`, { credentials: 'include' })
+    : await fetch(`${API_BASE}/layouts/`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: layouts`);
+  const json = await res.json();
+  apiCache.layouts = json;
+  try { await idbSet('layouts', json); } catch (e) {}
+  return json;
+}
+
+async function getLayoutDetailCached(layoutName) {
+  const localDetail = buildLocalLayoutDetail(layoutName);
+  if (localDetail) return localDetail;
+  if (apiCache.details[layoutName]) return apiCache.details[layoutName];
+  const cached = await idbGet(`layout:${layoutName}`);
+  if (cached) {
+    apiCache.details[layoutName] = cached;
+    return cached;
+  }
+  const res = (typeof globalThis.topFetch === 'function')
+    ? await globalThis.topFetch(`${API_BASE}/layouts/${layoutName}`, { credentials: 'include' })
+    : await fetch(`${API_BASE}/layouts/${layoutName}`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: layout ${layoutName}`);
+  const json = await res.json();
+  apiCache.details[layoutName] = json;
+  try { await idbSet(`layout:${layoutName}`, json); } catch (e) {}
+  return json;
+}
+
+async function clearApiCache() {
+  apiCache.layouts = null;
+  apiCache.details = {};
+  apiCache.componentToTab = {};
+  try { await idbClear(); } catch (e) { console.warn('Failed to clear idb', e); }
+}
+
+function getSavedViewsKey(layoutName) {
+  return `savedViews:${layoutName}`;
+}
+
+function getSavedViewsLastKey(layoutName) {
+  return `savedViewsLast:${layoutName}`;
+}
+
+async function getSavedViews(layoutName) {
+  const views = await idbGet(getSavedViewsKey(layoutName));
+  return Array.isArray(views) ? views : [];
+}
+
+async function setSavedViews(layoutName, views) {
+  await idbSet(getSavedViewsKey(layoutName), views);
+}
+
+async function getLastUsedSavedView(layoutName) {
+  const views = await getSavedViews(layoutName);
+  if (views.length === 0) return null;
+  const lastId = await idbGet(getSavedViewsLastKey(layoutName));
+  if (lastId) {
+    const hit = views.find(v => v.id === lastId);
+    if (hit) return hit;
+  }
+  return [...views].sort((a, b) => {
+    const ta = Date.parse(a.lastUsedAt || a.updatedAt || a.createdAt || 0) || 0;
+    const tb = Date.parse(b.lastUsedAt || b.updatedAt || b.createdAt || 0) || 0;
+    return tb - ta;
+  })[0] || null;
+}
+
+async function markSavedViewUsed(layoutName, viewId) {
+  const views = await getSavedViews(layoutName);
+  const idx = views.findIndex(v => v.id === viewId);
+  if (idx >= 0) {
+    views[idx].lastUsedAt = new Date().toISOString();
+    await setSavedViews(layoutName, views);
+    await idbSet(getSavedViewsLastKey(layoutName), viewId);
+  }
+}
+
+async function saveCurrentViewForLayout(layoutName, name) {
+  const params = new URLSearchParams(location.search);
+  if (!params.get('layout')) params.set('layout', layoutName);
+  const query = params.toString();
+
+  const views = await getSavedViews(layoutName);
+  const now = new Date().toISOString();
+  const normalizedName = (name && name.trim()) ? name.trim() : `Vy ${views.length + 1}`;
+  const matchIdx = views.findIndex(v => String(v.name || '').toLowerCase() === normalizedName.toLowerCase());
+
+  let view;
+  if (matchIdx >= 0) {
+    // Overwrite existing view with same name
+    view = {
+      ...views[matchIdx],
+      name: normalizedName,
+      query,
+      updatedAt: now,
+      lastUsedAt: now,
+    };
+    views[matchIdx] = view;
+  } else {
+    view = {
+      id: (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      name: normalizedName,
+      query,
+      createdAt: now,
+      updatedAt: now,
+      lastUsedAt: now,
+    };
+    views.push(view);
+  }
+
+  await setSavedViews(layoutName, views);
+  await idbSet(getSavedViewsLastKey(layoutName), view.id);
+  return view;
+}
+
+async function deleteSavedView(layoutName, viewId) {
+  const views = await getSavedViews(layoutName);
+  const filtered = views.filter(v => v.id !== viewId);
+  await setSavedViews(layoutName, filtered);
+  const lastId = await idbGet(getSavedViewsLastKey(layoutName));
+  if (lastId === viewId) {
+    await idbSet(getSavedViewsLastKey(layoutName), filtered[0]?.id || null);
+  }
+}
+
+async function applySavedView(layoutName, view, push) {
+  if (!view || !view.query) return false;
+  const query = view.query.startsWith('?') ? view.query.slice(1) : view.query;
+  const url = `?${query}`;
+  if (push) {
+    history.pushState({ rekyl: true }, '', url);
+  } else {
+    history.replaceState({ rekyl: true }, '', url);
+  }
+  await markSavedViewUsed(layoutName, view.id);
+  return restoreFromURL();
+}
+
+// ---- URL state management ----
+
+let _suppressUrlUpdate = false;
+
+function serializeStateToURL(push) {
+  if (_suppressUrlUpdate) return;
+  const p = new URLSearchParams();
+
+  if (state.currentLayout) p.set('layout', state.currentLayout.name);
+  if (state.searchTerm) p.set('q', state.searchTerm);
+  if (state.sortKey) {
+    p.set('sort', state.sortKey);
+    p.set('dir', state.sortAsc ? 'asc' : 'desc');
+  }
+  if (state.page > 0) p.set('p', String(state.page));
+  if (state.rowsPerPage !== 100) p.set('rpp', String(state.rowsPerPage));
+
+  // Column filters
+  for (const [key, val] of Object.entries(state.columnFilters)) {
+    if (!val) continue;
+    if (Array.isArray(val) && val.length > 0) {
+      p.set('fm.' + key, val.join('||'));
+    } else if (typeof val === 'string' && val) {
+      p.set('f.' + key, val);
+    }
+  }
+
+  // Hidden columns (only save if different from auto-computed defaults)
+  if (state.hiddenColumns.size > 0 && state.componentData) {
+    const defaultHidden = computeDefaultHidden(state.allColumns.filter(c => !c.key.startsWith('_join_')), state.componentData);
+    const currentHidden = new Set([...state.hiddenColumns].filter(k => !k.startsWith('_join_')));
+    // Check if hidden set differs from default
+    const differs = currentHidden.size !== defaultHidden.size || [...currentHidden].some(k => !defaultHidden.has(k)) || [...defaultHidden].some(k => !currentHidden.has(k));
+    if (differs) {
+      p.set('hide', [...currentHidden].join(','));
+    }
+  }
+
+  // Column order (only if allColumns exist and order differs from default)
+  // Column order (include joined columns as well). Deduplicate order before serializing.
+  const defaultOrder = state.allColumns.map(c => c.key);
+  const currentOrder = [...new Set(state.columnOrder)];
+  if (defaultOrder.length > 0 && JSON.stringify(currentOrder) !== JSON.stringify(defaultOrder)) {
+    p.set('cols', currentOrder.join(','));
+  }
+
+  // Joins (serialized without data)
+  for (const j of state.joins) {
+    p.append('join', `${j.layoutName}~${j.localKey}~${j.remoteKey}~${j.remoteCols.join(',')}`);
+  }
+
+  const qs = p.toString();
+  const url = qs ? `?${qs}` : location.pathname;
+  if (push) {
+    history.pushState({ rekyl: true }, '', url);
+  } else {
+    history.replaceState({ rekyl: true }, '', url);
+  }
+}
+
+function deserializeStateFromURL() {
+  const p = new URLSearchParams(location.search);
+  const result = {
+    layout: p.get('layout') || null,
+    searchTerm: p.get('q') || '',
+    sortKey: p.get('sort') || null,
+    sortAsc: p.get('dir') !== 'desc',
+    page: parseInt(p.get('p') || '0', 10) || 0,
+    rowsPerPage: parseInt(p.get('rpp') || '100', 10) || 100,
+    columnFilters: {},
+    hiddenColumns: new Set(),
+    columnOrder: p.get('cols') ? p.get('cols').split(',') : null,
+    joins: [],
+  };
+
+  for (const [key, val] of p.entries()) {
+    if (key.startsWith('f.')) {
+      result.columnFilters[key.slice(2)] = val;
+    } else if (key.startsWith('fm.')) {
+      result.columnFilters[key.slice(3)] = val.split('||');
+    }
+  }
+
+  const hideStr = p.get('hide');
+  if (hideStr) {
+    for (const col of hideStr.split(',')) result.hiddenColumns.add(col);
+  }
+
+  for (const jStr of p.getAll('join')) {
+    const parts = jStr.split('~');
+    if (parts.length >= 4) {
+      result.joins.push({
+        layoutName: parts[0],
+        localKey: parts[1],
+        remoteKey: parts[2],
+        remoteCols: parts[3].split(','),
+      });
+    }
+  }
+
+  return result;
+}
+
+async function restoreFromURL() {
+  const saved = deserializeStateFromURL();
+  if (!saved.layout) return false;
+
+  // If URL only has layout, default to last used saved view for that layout.
+  const raw = new URLSearchParams(location.search);
+  const onlyLayout = raw.get('layout') && (() => {
+    const p = new URLSearchParams(raw.toString());
+    p.delete('layout');
+    return [...p.keys()].length === 0;
+  })();
+  if (onlyLayout) {
+    const last = await getLastUsedSavedView(saved.layout);
+    const currentQ = raw.toString();
+    if (last && last.query && last.query !== currentQ) {
+      history.replaceState({ rekyl: true }, '', `?${last.query}`);
+      return restoreFromURL();
+    }
+  }
+
+  const layout = state.layouts.find(l => l.name === saved.layout);
+  if (!layout) return false;
+
+  _suppressUrlUpdate = true;
+
+  state.currentLayout = layout;
+  state.currentTab = null;
+  state.sortKey = null;
+  state.sortAsc = true;
+  state.searchTerm = '';
+  state.page = 0;
+  state.columnFilters = {};
+  state.hiddenColumns = new Set();
+  state.columnOrder = [];
+  state.allColumns = [];
+  state.joins = [];
+
+  renderNav(document.getElementById('sidebar-search').value);
+  document.getElementById('page-title').textContent = layout.title;
+  document.getElementById('page-subtitle').textContent = layout.name;
+  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Laddar layout...</div>';
+
+  try {
+    const detail = await loadLayoutDetail(layout);
+    state.currentLayoutDetail = detail;
+    const tabs = extractTabs(detail);
+
+    if (tabs.length === 0) {
+      document.getElementById('content').innerHTML = '<div class="empty-data">Inga komponenter i denna layout</div>';
+      _suppressUrlUpdate = false;
+      return true;
+    }
+
+    const tab = tabs[0];
+    state.currentTab = tab;
+
+    const { data, meta } = await loadComponent(layout.name, tab.componentId);
+    state.componentData = data;
+    state.componentMeta = meta;
+
+    let columns = []; // Default column if no meta or data
+    if (meta && meta.length > 0) {
+      columns = meta.map(m => ({ key: m.propertyName, header: m.header }));
+    } else if (data && data.length > 0) {
+      columns = Object.keys(data[0]).map(k => ({ key: k, header: k }));
+    }
+    state.allColumns = columns;
+    state.columnOrder = saved.columnOrder || columns.map(c => c.key);
+
+    // Restore filter/sort/page state
+    state.searchTerm = saved.searchTerm;
+    state.sortKey = saved.sortKey;
+    state.sortAsc = saved.sortAsc;
+    state.page = saved.page;
+    state.rowsPerPage = saved.rowsPerPage;
+    state.columnFilters = saved.columnFilters;
+    // Use URL-saved hidden columns if present, otherwise compute defaults
+    state.hiddenColumns = saved.hiddenColumns.size > 0
+      ? saved.hiddenColumns
+      : computeDefaultHidden(columns, data);
+
+    // Restore joins (re-fetch remote data)
+    for (const jDef of saved.joins) {
+      try {
+        const { data: rData, meta: rMeta } = await loadRemoteComponent(jDef.layoutName, await getFirstComponentId(jDef.layoutName));
+        state.joins.push({
+          layoutName: jDef.layoutName,
+          componentId: await getFirstComponentId(jDef.layoutName),
+          localKey: jDef.localKey,
+          remoteKey: jDef.remoteKey,
+          remoteCols: jDef.remoteCols,
+          remoteData: rData,
+          remoteMeta: rMeta,
+        });
+      } catch (err) {
+        console.warn('Could not restore join:', jDef, err);
+      }
+    }
+
+    renderComponent(tab, data);
+  } catch (err) {
+    document.getElementById('content').innerHTML = `<div class="error-msg">Kunde inte ladda layout: ${escapeHtml(err.message)}</div>`;
+  }
+
+  _suppressUrlUpdate = false;
+  return true;
+}
+
+async function getFirstComponentId(layoutName) {
+  const detail = await getLayoutDetailCached(layoutName);
+  const tabs = extractTabs(detail);
+  const compIds = [...new Set(tabs.map(t => t.componentId))];
+  return compIds[0];
+}
+
+// ---- Data loading ----
+
+async function fetchJSON(path) {
+  console.log('Fetching', path);
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`);
+  return res.json();
+}
+
+async function loadLayouts() {
+  const remote = await getLayoutsCached();
+  state.layouts = [...LOCAL_LAYOUTS, ...remote];
+  renderNav();
+}
+
+async function loadLayoutDetail(layout) {
+  return getLayoutDetailCached(layout.name);
+}
+
+function buildMetaFromRows(rows) {
+  const allKeys = new Set();
+  for (const row of rows || []) {
+    Object.keys(row || {}).forEach(k => allKeys.add(k));
+  }
+  const keys = [...allKeys];
+  keys.sort((a, b) => {
+    if (a === 'id') return -1;
+    if (b === 'id') return 1;
+    return a.localeCompare(b, 'sv');
+  });
+  return keys.map(k => ({ propertyName: k, header: k === 'id' ? 'ID' : k }));
+}
+
+
+async function importData(layoutData) {
+  const components = {}
+  for (const row of layoutData.rows) {
+    for (const column of row.columns) {
+      for (const tab of column.tabs) {
+        try {
+          // console.log(`Fetching data for tab`, tab)
+          const { rows, columns } = await getAllRows(tab.id, tab.componentId)
+          // @ts-ignore
+          const component = (components[tab.componentId] ??= {
+            columns,
+            rows: new Map()
+          })
+
+          for (const row of rows) {
+            component.rows.set(row.id, row)
+          }
+        } catch (e) {
+          console.error(`Failed to fetch data for tab`, tab, e)
+        }
+      }
+    }
+  }
+
+  return Object.values(components)[0]
+}
+
+
+async function getAllRows(tab, componentId) {
+  // Try IndexedDB cache first
+  try {
+    const cached = await idbGet(`tab:${tab}`);
+    if (cached && cached.rows && cached.columns) {
+      return { rows: cached.rows, columns: cached.columns };
+    }
+  } catch (e) { /* ignore idb errors */ }
+  let page = 1;
+  let allRows = []
+  let columns = null;
+  while (true) {
+    const firstRes = await topFetch(`https://api.rekyl.nu/8399/v1/ui/tabs/${tab}/list`, {
+      "headers": { "content-type": "application/json" },
+      "body": JSON.stringify({
+        "rows": 1000,
+        "page": page++,
+        "filters": [],
+        "componentId": componentId
+      }),
+      "method": "POST",
+      "credentials": "include"
+    })
+
+    const firstData = await firstRes.json()
+    // console.log(firstData.columns)
+    columns ??= firstData.columns.map(col => ({
+      propertyName: col.propertyName || col.header,
+      header: col.header
+    }))
+
+    // 2. Bygg lookup: referenceId -> propertyName
+    const columnMap = {};
+    firstData.columns.forEach(col => {
+      columnMap[col.referenceId] = col.propertyName || col.header;
+    })
+
+    // helper: städa en row
+    const normalizeRow = (row) => {
+      const clean = {
+        id: row.__id
+      };
+      for (const [key, value] of Object.entries(row)) {
+        if (
+          key.endsWith("_tooltip") ||
+          key === "str_cssclass"
+        ) continue;
+
+        const mappedKey = columnMap[key];
+        if (mappedKey) {
+          clean[mappedKey] = value;
+        }
+      }
+      return clean;
+    }
+
+    const rows = firstData.rows.map(normalizeRow)
+    allRows.push(...rows)
+    if (rows.length < 999) break
+  }
+
+  // Persist to IndexedDB for faster subsequent loads
+  try { await idbSet(`tab:${tab}`, { rows: allRows, columns }); } catch (e) {}
+  return { rows: allRows, columns }
+}
+
+
+async function loadComponent(folderName, componentId) {
+  const local = getLocalLayoutByName(folderName) || getLocalLayoutByName(componentId);
+  if (local) {
+    const rows = await idbGetAll(local._localStore);
+    const meta = buildMetaFromRows(rows);
+    return { data: rows, meta };
+  }
+
+  console.log('Loading component', folderName, componentId);
+  const _meta = await topFetch('https://api.rekyl.nu/8399/v1/ui/layouts/' + folderName, { credentials: 'include' })
+    .then(res => res.json())
+
+  const {columns: meta, rows: data} = await importData(_meta);
+  console.log({data})
+  meta?.unshift({ propertyName: 'id', header: 'ID' }); // Ensure "id" column is always present in meta
+  return { data: [...data.values()], meta };
+}
+
+// ---- Extract all tabs from layout detail ----
+
+function extractTabs(layoutDetail) {
+  const tabs = [];
+  if (!layoutDetail?.rows) return tabs;
+  for (const row of layoutDetail.rows) {
+    if (!row.columns) continue;
+    for (const col of row.columns) {
+      if (!col.tabs) continue;
+      for (const tab of col.tabs) tabs.push(tab);
+    }
+  }
+  return tabs;
+}
+
+// ---- Get visible columns in current drag order ----
+
+function getVisibleColumns() {
+  return state.columnOrder
+    .filter(key => !state.hiddenColumns.has(key))
+    .map(key => state.allColumns.find(c => c.key === key))
+    .filter(Boolean);
+}
+
+// ---- Compute columns to hide by default (empty cols + id cols) ----
+
+function computeDefaultHidden(columns, data) {
+  const hidden = new Set();
+  const rows = data || [];
+  for (const col of columns) {
+    // Hide id columns (exact "id" or ending with "_id")
+    if (col.key === 'id' || col.key.endsWith('_id')) {
+      hidden.add(col.key);
+      continue;
+    }
+    // Hide columns where no row has a non-empty value
+    const hasValue = rows.some(row => {
+      const v = row[col.key];
+      return v !== null && v !== undefined && v !== '';
+    });
+    if (!hasValue) hidden.add(col.key);
+  }
+  return hidden;
+}
+
+// ---- Render sidebar ----
+
+function renderNav(filter = '') {
+  const list = document.getElementById('nav-list');
+  const lc = filter.toLowerCase();
+  const filtered = state.layouts
+    .filter(l => !lc || l.title.toLowerCase().includes(lc) || l.name.toLowerCase().includes(lc));
+  const local = filtered.filter(l => !!l._localStore);
+  const remote = filtered.filter(l => !l._localStore);
+
+  const renderItem = (l) => `
+      <li class="nav-item ${state.currentLayout?.id === l.id ? 'active' : ''}" data-id="${l.id}">
+        <a href="?layout=${encodeURIComponent(l.name)}">
+          <span class="nav-id">${l._localStore ? 'IDB' : l.id}</span>
+          ${escapeHtml(l.title)}
+        </a>
+      </li>
+  `;
+
+  let html = '';
+  if (local.length > 0) {
+    html += '<li class="nav-item" style="cursor:default;opacity:.8;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">IndexedDB</li>';
+    html += local.map(renderItem).join('');
+    if (remote.length > 0) {
+      html += '<li class="nav-item" style="cursor:default;opacity:.45;height:1px;padding:0;margin:4px 12px;border-left:none;background:rgba(255,255,255,.15);"></li>';
+    }
+  }
+  html += remote.map(renderItem).join('');
+  list.innerHTML = html;
+
+  // Allow middle-click / cmd-click to open in new tab. For plain left-click, prevent default and use SPA navigation.
+  list.querySelectorAll('.nav-item a').forEach(a => {
+    a.addEventListener('click', (e) => {
+      // If non-primary click or modifier keys, allow default (open in new tab/window)
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      const li = a.closest('.nav-item');
+      const layout = state.layouts.find(l => String(l.id) === String(li.dataset.id));
+      if (layout) selectLayout(layout);
+    });
+  });
+}
+
+// ---- Select a layout ----
+
+async function selectLayout(layout) {
+  const lastSavedView = await getLastUsedSavedView(layout.name);
+  if (lastSavedView && lastSavedView.query) {
+    const restored = await applySavedView(layout.name, lastSavedView, true);
+    if (restored) return;
+  }
+
+  state.currentLayout = layout;
+  state.currentTab = null;
+  resetTableState();
+
+  renderNav(document.getElementById('sidebar-search').value);
+  document.getElementById('page-title').textContent = layout.title;
+  document.getElementById('page-subtitle').textContent = layout.name;
+  document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div>Laddar layout...</div>';
+
+  // Push new history entry for layout navigation
+  serializeStateToURL(true);
+
+  try {
+    const detail = await loadLayoutDetail(layout);
+    state.currentLayoutDetail = detail;
+    const tabs = extractTabs(detail);
+
+    if (tabs.length === 0) {
+      document.getElementById('content').innerHTML = '<div class="empty-data">Inga komponenter i denna layout</div>';
+      return;
+    }
+
+    selectTab(tabs[0], layout.name);
+  } catch (err) {
+    document.getElementById('content').innerHTML = `<div class="error-msg">Kunde inte ladda layout: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function resetTableState() {
+  state.sortKey = null;
+  state.sortAsc = true;
+  state.searchTerm = '';
+  state.page = 0;
+  state.columnFilters = {};
+  state.hiddenColumns = new Set();
+  state.columnOrder = [];
+  state.allColumns = [];
+  state.joins = [];
+}
+
+// ---- Select a tab / component ----
+
+async function selectTab(tab, folderName) {
+  state.currentTab = tab;
+  resetTableState();
+
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="loading"><div class="spinner"></div>Laddar komponent...</div>';
+
+  try {
+    const { data, meta } = await loadComponent(folderName, tab.componentId);
+    state.componentData = data;
+    state.componentMeta = meta;
+
+    // Build columns
+    let columns = [];
+    if (meta && meta.length > 0) {
+      columns = meta.map(m => ({ key: m.propertyName, header: m.header }));
+    } else if (data && data.length > 0) {
+      columns = Object.keys(data[0]).map(k => ({ key: k, header: k }));
+    }
+    state.allColumns = columns;
+    state.columnOrder = columns.map(c => c.key);
+    state.hiddenColumns = computeDefaultHidden(columns, data);
+    renderComponent(tab, data);
+  } catch (err) {
+    content.innerHTML = `<div class="error-msg">Kunde inte ladda komponent ${tab.componentId}: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ---- Render component ----
+
+function renderComponent(tab, data) {
+  const content = document.getElementById('content');
+  const rows = data || [];
+  const layoutName = (state.currentLayout && state.currentLayout.name) || new URLSearchParams(location.search).get('layout') || '';
+  const isProjectLayout = layoutName === 'projectlist';
+  const isWorkorderLayout = layoutName === 'workorderlist';
+  const canAssignResources = isProjectLayout || isWorkorderLayout;
+  const assignBlocks = [];
+  if (canAssignResources) {
+    assignBlocks.push(`
+      <div class="batch-assign-wrap">
+        <select id="batch-salesman-select" class="batch-salesman-select">
+          <option value="">Välj resurs (hämtas)</option>
+        </select>
+        <button id="batch-assign-btn" class="batch-assign-btn">Assigna resurs till valda rader</button>
+        <progress id="batch-progress" class="batch-progress" value="0" max="100"></progress>
+        <span id="batch-status" class="batch-status"></span>
+      </div>
+    `);
+  }
+  if (isProjectLayout) {
+    assignBlocks.push(`
+      <div class="batch-assign-wrap">
+        <select id="project-import-mode" class="project-import-mode">
+          <option value="skip">Skip existing</option>
+          <option value="update">Update all selected</option>
+        </select>
+        <button id="project-import-btn" class="project-import-btn">Importera fulla projektdetaljer</button>
+        <progress id="project-import-progress" class="batch-progress" value="0" max="100"></progress>
+        <span id="project-import-status" class="batch-status"></span>
+      </div>
+    `);
+  }
+  if (isWorkorderLayout) {
+    assignBlocks.push(`
+      <div class="batch-assign-wrap">
+        <select id="order-import-mode" class="project-import-mode">
+          <option value="skip">Skip existing</option>
+          <option value="update">Update all selected</option>
+        </select>
+        <button id="order-import-btn" class="project-import-btn">Importera fulla orderdetaljer</button>
+        <progress id="order-import-progress" class="batch-progress" value="0" max="100"></progress>
+        <span id="order-import-status" class="batch-status"></span>
+      </div>
+    `);
+  }
+  const assignHtml = assignBlocks.length ? `<div class="toolbar-right">${assignBlocks.join('')}</div>` : '';
+  const hasAssignTools = assignBlocks.length > 0;
+  const savedViewsHtml = `
+    <div class="saved-views-wrap">
+      <strong style="font-size:12px;color:var(--text-muted);">Sparade vyer</strong>
+      <select id="saved-view-select">
+        <option value="">Inga sparade vyer</option>
+      </select>
+      <input id="saved-view-name" type="search" placeholder="Namn på vy" autocomplete="off">
+      <button id="saved-view-save">Spara aktuell vy</button>
+      <button id="saved-view-load">Ladda vy</button>
+      <button id="saved-view-delete">Ta bort vy</button>
+      <span id="saved-view-status" class="saved-views-status"></span>
+    </div>
+  `;
+  const toolsBarHtml = `
+    <div class="focus-tools-bar">
+      <button id="focus-btn-saved" class="focus-tools-btn">Sparade vyer</button>
+      ${hasAssignTools ? '<button id="focus-btn-actions" class="focus-tools-btn">Resurser & import</button>' : ''}
+      <button id="focus-btn-hide" class="focus-tools-btn active">Fokusläge</button>
+      <span id="focus-tools-status" class="focus-tools-status">Visar endast tabell</span>
+    </div>
+  `;
+
+  if (!data && !state.componentMeta) {
+    content.innerHTML = '<div class="empty-data">Ingen data eller metadata hittades för denna komponent</div>';
+    return;
+  }
+
+  // Component info
+  let paramsHtml = '';
+  if (tab.parameters && Object.keys(tab.parameters).length > 0) {
+    const params = Object.entries(tab.parameters)
+      .filter(([, v]) => v !== '' && v !== null)
+      .map(([k, v]) => `<strong>${escapeHtml(k)}</strong>: ${escapeHtml(String(v))}`)
+      .join(' &nbsp;|&nbsp; ');
+    if (params) {
+      paramsHtml = `<div class="component-params">Komponent: <strong>${tab.componentId}</strong> (${escapeHtml(tab.component || '')}) &nbsp;|&nbsp; ${params}</div>`;
+    }
+  }
+  if (!paramsHtml) {
+    paramsHtml = `<div class="component-params">Komponent: <strong>${tab.componentId}</strong> (${escapeHtml(tab.component || '')})</div>`;
+  }
+
+  content.innerHTML = `
+    ${paramsHtml}
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="row-count" id="row-count">${rows.length} rader</span>
+        <button class="clear-filters-btn" id="clear-filters">&#x2715; Rensa filter</button>
+      </div>
+      <div class="toolbar-left">
+        <input type="search" id="table-search" placeholder="Sök i alla kolumner..." autocomplete="off">
+        <div class="col-picker-wrap">
+          <button class="col-picker-btn" id="col-picker-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            Kolumner
+          </button>
+          <div class="col-picker-dropdown" id="col-picker-dropdown"></div>
+        </div>
+        <button class="join-btn" id="join-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          Join
+        </button>
+        <div class="export-wrap">
+          <button class="export-btn" id="export-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 7l4-4 4 4M21 21H3"/></svg>
+            Export
+          </button>
+          <div class="export-dropdown" id="export-dropdown"></div>
+        </div>
+      </div>
+    </div>
+    ${toolsBarHtml}
+    <div id="saved-views-panel" class="focus-tools-panel hidden">${savedViewsHtml}</div>
+    ${hasAssignTools ? `<div id="task-tools-panel" class="focus-tools-panel hidden">${assignHtml}</div>` : ''}
+    <div class="join-panel" id="join-panel"></div>
+    <div class="table-wrapper" id="table-wrapper"></div>
+    <div class="pagination" id="pagination"></div>
+    <datalist id="rows-suggestions">
+      <option value="25"><option value="50"><option value="100"><option value="250"><option value="500"><option value="1000">
+    </datalist>
+  `;
+
+  document.getElementById('table-search').addEventListener('input', (e) => {
+    state.searchTerm = e.target.value;
+    state.page = 0;
+    renderTable(rows);
+  });
+
+  document.getElementById('col-picker-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = document.getElementById('col-picker-dropdown');
+    dd.classList.toggle('open');
+    if (dd.classList.contains('open')) renderColumnPicker(rows);
+  });
+
+  document.addEventListener('click', closePickerOnOutsideClick);
+
+  document.getElementById('join-btn').addEventListener('click', () => {
+    const panel = document.getElementById('join-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) renderJoinPanel(rows);
+  });
+
+  // Export button
+  document.getElementById('export-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = document.getElementById('export-dropdown');
+    dd.classList.toggle('open');
+    if (dd.classList.contains('open')) renderExportDropdown(rows);
+  });
+
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    state.columnFilters = {};
+    state.page = 0;
+    renderTable(rows);
+  });
+
+  // Focus-tool panels: keep the screen clean and only show the task-specific controls when needed.
+  const savedPanel = document.getElementById('saved-views-panel');
+  const actionsPanel = document.getElementById('task-tools-panel');
+  const focusStatus = document.getElementById('focus-tools-status');
+  const btnSaved = document.getElementById('focus-btn-saved');
+  const btnActions = document.getElementById('focus-btn-actions');
+  const btnHide = document.getElementById('focus-btn-hide');
+
+  const setPanelMode = (mode) => {
+    if (savedPanel) savedPanel.classList.toggle('hidden', mode !== 'saved');
+    if (actionsPanel) actionsPanel.classList.toggle('hidden', mode !== 'actions');
+    if (btnSaved) btnSaved.classList.toggle('active', mode === 'saved');
+    if (btnActions) btnActions.classList.toggle('active', mode === 'actions');
+    if (btnHide) btnHide.classList.toggle('active', mode === 'focus');
+    if (focusStatus) {
+      if (mode === 'saved') focusStatus.textContent = 'Sparade vyer synliga';
+      else if (mode === 'actions') focusStatus.textContent = 'Resurs/import-verktyg synliga';
+      else focusStatus.textContent = 'Visar endast tabell';
+    }
+  };
+
+  btnSaved?.addEventListener('click', () => {
+    const open = savedPanel && savedPanel.classList.contains('hidden');
+    setPanelMode(open ? 'saved' : 'focus');
+  });
+  btnActions?.addEventListener('click', () => {
+    const open = actionsPanel && actionsPanel.classList.contains('hidden');
+    setPanelMode(open ? 'actions' : 'focus');
+  });
+  btnHide?.addEventListener('click', () => setPanelMode('focus'));
+  setPanelMode('focus');
+
+  // Populate salesman select and wire project actions
+  (async () => {
+    // Saved views (URL params presets) per layout
+    const savedSel = document.getElementById('saved-view-select');
+    const savedName = document.getElementById('saved-view-name');
+    const savedStatus = document.getElementById('saved-view-status');
+    const saveBtn = document.getElementById('saved-view-save');
+    const loadBtn = document.getElementById('saved-view-load');
+    const delBtn = document.getElementById('saved-view-delete');
+
+    const refreshSavedViews = async () => {
+      if (!savedSel) return;
+      const views = await getSavedViews(layoutName);
+      if (views.length === 0) {
+        savedSel.innerHTML = '<option value="">Inga sparade vyer</option>';
+        return;
+      }
+      const last = await getLastUsedSavedView(layoutName);
+      savedSel.innerHTML = views.map(v => {
+        const sel = last && v.id === last.id ? 'selected' : '';
+        return `<option value="${escapeHtml(v.id)}" ${sel}>${escapeHtml(v.name)}</option>`;
+      }).join('');
+    };
+
+    await refreshSavedViews();
+
+    saveBtn?.addEventListener('click', async () => {
+      try {
+        const view = await saveCurrentViewForLayout(layoutName, savedName?.value || '');
+        if (savedName) savedName.value = '';
+        await refreshSavedViews();
+        if (savedStatus) savedStatus.textContent = `Sparad: ${view.name}`;
+      } catch (err) {
+        if (savedStatus) savedStatus.textContent = `Fel: ${err.message || err}`;
+      }
+    });
+
+    loadBtn?.addEventListener('click', async () => {
+      const viewId = savedSel?.value;
+      if (!viewId) {
+        if (savedStatus) savedStatus.textContent = 'Välj en vy';
+        return;
+      }
+      const views = await getSavedViews(layoutName);
+      const view = views.find(v => v.id === viewId);
+      if (!view) {
+        if (savedStatus) savedStatus.textContent = 'Kunde inte hitta vy';
+        return;
+      }
+      await applySavedView(layoutName, view, true);
+    });
+
+    delBtn?.addEventListener('click', async () => {
+      const viewId = savedSel?.value;
+      if (!viewId) {
+        if (savedStatus) savedStatus.textContent = 'Välj en vy';
+        return;
+      }
+      try {
+        await deleteSavedView(layoutName, viewId);
+        await refreshSavedViews();
+        if (savedStatus) savedStatus.textContent = 'Vy borttagen';
+      } catch (err) {
+        if (savedStatus) savedStatus.textContent = `Fel: ${err.message || err}`;
+      }
+    });
+
+    const sel = document.getElementById('batch-salesman-select');
+    const statusEl = document.getElementById('batch-status');
+    const assignBtn = document.getElementById('batch-assign-btn');
+    if (sel && assignBtn) {
+      try {
+        const sales = await fetchSalesmenList().catch(() => []);
+        if (sales && sales.length) {
+          sel.innerHTML = '<option value="">Välj resurs...</option>' + sales.map(s => `<option value="${encodeURIComponent(s.id)}">${escapeHtml(s.name || '')} (${s.id})</option>`).join('');
+        }
+      } catch (err) {
+        console.warn('Could not load salesmen', err);
+      }
+
+      assignBtn.addEventListener('click', async () => {
+        const selected = [...state.selectedRows];
+        if (selected.length === 0) {
+          const vis = await getVisibleRowIds();
+          if (vis.length === 0) {
+            if (statusEl) statusEl.textContent = 'Ingen rad vald';
+            return;
+          }
+          selected.push(...vis);
+        }
+        const salesmanVal = document.getElementById('batch-salesman-select').value;
+        let resType = null, tabVal = null;
+        if (layoutName === 'projectlist') {
+          resType = '9'; tabVal = '6506';
+        } else if (layoutName === 'workorderlist') {
+          resType = '7'; tabVal = '267';
+        } else {
+          if (statusEl) statusEl.textContent = `Okänt layout: ${layoutName}`;
+          return;
+        }
+        const concurrency = 2;
+        if (!salesmanVal) {
+          if (statusEl) statusEl.textContent = 'Välj resurs först';
+          return;
+        }
+        const pref = `0_${decodeURIComponent(salesmanVal)}`;
+        const opts = { resourcetype: resType, tab: tabVal, concurrency, _onProgress: (done, total, currentId) => {
+          const prog = document.getElementById('batch-progress');
+          if (prog) { prog.style.display = 'inline-block'; prog.value = Math.round((done/total)*100); }
+          if (statusEl) statusEl.textContent = `${done}/${total} — senast: ${currentId}`;
+        }};
+
+        const prog = document.getElementById('batch-progress');
+        if (prog) { prog.style.display = 'inline-block'; prog.value = 0; }
+        if (statusEl) statusEl.textContent = 'Startar...';
+        try {
+          const res = await batchAssignToResource(selected, opts, pref);
+          if (statusEl) statusEl.textContent = `Klar — lyckade: ${res.success.length}, misslyckade: ${res.failed.length}`;
+        } catch (err) {
+          if (statusEl) statusEl.textContent = `Fel: ${err.message || err}`;
+        } finally {
+          setTimeout(() => { const p = document.getElementById('batch-progress'); if (p) p.style.display = 'none'; }, 2000);
+        }
+      });
+    }
+
+    const importBtn = document.getElementById('project-import-btn');
+    const importStatusEl = document.getElementById('project-import-status');
+    const importModeEl = document.getElementById('project-import-mode');
+    if (importBtn) {
+      importBtn.addEventListener('click', async () => {
+        const selected = [...state.selectedRows];
+        if (selected.length === 0) {
+          const vis = await getVisibleRowIds();
+          if (vis.length === 0) {
+            if (importStatusEl) importStatusEl.textContent = 'Ingen rad vald';
+            return;
+          }
+          selected.push(...vis);
+        }
+
+        const prog = document.getElementById('project-import-progress');
+        if (prog) { prog.style.display = 'inline-block'; prog.value = 0; }
+        if (importStatusEl) importStatusEl.textContent = 'Importerar...';
+        const importMode = (importModeEl && importModeEl.value === 'update') ? 'update' : 'skip';
+
+        try {
+          const result = await importSelectedFullProjects(selected, importMode, (done, total, currentId) => {
+            if (prog) prog.value = Math.round((done / total) * 100);
+            if (importStatusEl) importStatusEl.textContent = `${done}/${total} — senast: ${currentId}`;
+          });
+          if (importStatusEl) importStatusEl.textContent = `Klar — sparade: ${result.saved.length}, hoppade över: ${result.skipped.length}, misslyckade: ${result.failed.length}`;
+        } catch (err) {
+          if (importStatusEl) importStatusEl.textContent = `Fel: ${err.message || err}`;
+        } finally {
+          setTimeout(() => { if (prog) prog.style.display = 'none'; }, 2000);
+        }
+      });
+    }
+
+    const orderImportBtn = document.getElementById('order-import-btn');
+    const orderImportStatusEl = document.getElementById('order-import-status');
+    const orderImportModeEl = document.getElementById('order-import-mode');
+    if (orderImportBtn) {
+      orderImportBtn.addEventListener('click', async () => {
+        const selected = [...state.selectedRows];
+        if (selected.length === 0) {
+          const vis = await getVisibleRowIds();
+          if (vis.length === 0) {
+            if (orderImportStatusEl) orderImportStatusEl.textContent = 'Ingen rad vald';
+            return;
+          }
+          selected.push(...vis);
+        }
+
+        const prog = document.getElementById('order-import-progress');
+        if (prog) { prog.style.display = 'inline-block'; prog.value = 0; }
+        if (orderImportStatusEl) orderImportStatusEl.textContent = 'Importerar...';
+        const importMode = (orderImportModeEl && orderImportModeEl.value === 'update') ? 'update' : 'skip';
+
+        try {
+          const result = await importSelectedFullOrders(selected, importMode, (done, total, currentId) => {
+            if (prog) prog.value = Math.round((done / total) * 100);
+            if (orderImportStatusEl) orderImportStatusEl.textContent = `${done}/${total} — senast: ${currentId}`;
+          });
+          if (orderImportStatusEl) orderImportStatusEl.textContent = `Klar — sparade: ${result.saved.length}, hoppade över: ${result.skipped.length}, misslyckade: ${result.failed.length}`;
+        } catch (err) {
+          if (orderImportStatusEl) orderImportStatusEl.textContent = `Fel: ${err.message || err}`;
+        } finally {
+          setTimeout(() => { if (prog) prog.style.display = 'none'; }, 2000);
+        }
+      });
+    }
+  })();
+
+  renderTable(rows);
+}
+
+function closePickerOnOutsideClick(e) {
+  const dd = document.getElementById('col-picker-dropdown');
+  const btn = document.getElementById('col-picker-btn');
+  if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+}
+
+// ---- Column picker dropdown ----
+
+function renderColumnPicker(rows) {
+  const dd = document.getElementById('col-picker-dropdown');
+  const allVisible = state.hiddenColumns.size === 0;
+
+  let html = `<div class="cp-header">
+    <span>Visa/dölj kolumner</span>
+    <a id="cp-toggle-all">${allVisible ? 'Dölj alla' : 'Visa alla'}</a>
+  </div>`;
+
+  for (const key of state.columnOrder) {
+    const col = state.allColumns.find(c => c.key === key);
+    if (!col) continue;
+    const checked = !state.hiddenColumns.has(key);
+    html += `<div class="col-picker-item" draggable="true" data-key="${escapeHtml(key)}">
+      <span class="cp-drag-handle">⠿</span>
+      <input type="checkbox" ${checked ? 'checked' : ''} data-key="${escapeHtml(key)}">
+      <span>${escapeHtml(col.header)}</span>
+    </div>`;
+  }
+
+  dd.innerHTML = html;
+
+  // Toggle all
+  dd.querySelector('#cp-toggle-all').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (state.hiddenColumns.size === 0) {
+      state.allColumns.forEach(c => state.hiddenColumns.add(c.key));
+    } else {
+      state.hiddenColumns.clear();
+    }
+    renderColumnPicker(rows);
+    renderTable(rows);
+  });
+
+  // Checkbox clicks
+  dd.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.key;
+      if (cb.checked) {
+        state.hiddenColumns.delete(key);
+      } else {
+        state.hiddenColumns.add(key);
+      }
+      renderTable(rows);
+      const link = dd.querySelector('#cp-toggle-all');
+      if (link) link.textContent = state.hiddenColumns.size === 0 ? 'Dölj alla' : 'Visa alla';
+    });
+  });
+
+  // Drag-and-drop reorder in picker
+  let dragKey = null;
+  dd.querySelectorAll('.col-picker-item').forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+      dragKey = item.dataset.key;
+      item.classList.add('dragging-cp');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging-cp');
+      dd.querySelectorAll('.col-picker-item').forEach(i => i.classList.remove('drag-over-cp'));
+      dragKey = null;
+    });
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      dd.querySelectorAll('.col-picker-item').forEach(i => i.classList.remove('drag-over-cp'));
+      if (dragKey !== item.dataset.key) item.classList.add('drag-over-cp');
+    });
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over-cp');
+    });
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      item.classList.remove('drag-over-cp');
+      const targetKey = item.dataset.key;
+      if (dragKey && dragKey !== targetKey) {
+        const order = [...state.columnOrder];
+        const fromIdx = order.indexOf(dragKey);
+        const toIdx = order.indexOf(targetKey);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          order.splice(fromIdx, 1);
+          order.splice(toIdx, 0, dragKey);
+              state.columnOrder = order;
+              // Update URL to reflect new column order immediately
+              serializeStateToURL(false);
+              renderColumnPicker(rows);
+              renderTable(rows);
+        }
+      }
+    });
+  });
+}
+
+// ---- Export dropdown & helpers ----
+function renderExportDropdown(rows) {
+  const dd = document.getElementById('export-dropdown');
+  const html = `
+    <div class="export-header">Exportera</div>
+    <div class="export-section">
+      <div class="export-scope">Scope:</div>
+      <button class="export-action" data-format="csv" data-scope="page">CSV (current page)</button>
+      <button class="export-action" data-format="csv" data-scope="all">CSV (all rows)</button>
+      <button class="export-action" data-format="excel" data-scope="page">Excel (current page)</button>
+      <button class="export-action" data-format="excel" data-scope="all">Excel (all rows)</button>
+      <button class="export-action" data-format="json" data-scope="page">JSON (current page)</button>
+      <button class="export-action" data-format="json" data-scope="all">JSON (all rows)</button>
+      <button class="export-action" data-format="md" data-scope="page">Markdown (current page)</button>
+      <button class="export-action" data-format="md" data-scope="all">Markdown (all rows)</button>
+    </div>`;
+
+  dd.innerHTML = html;
+
+  dd.querySelectorAll('.export-action').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const format = btn.dataset.format;
+      const scope = btn.dataset.scope; // 'page'|'all'
+      doExport(format, rows, scope);
+      dd.classList.remove('open');
+    });
+  });
+}
+
+function downloadBlob(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function doExport(format, rawRows, scope) {
+  const rows = applyJoins(rawRows);
+  const columns = getVisibleColumns();
+  const filtered = getFilteredSortedRows(columns, rows);
+  let exportRows = filtered;
+  if (scope === 'page') {
+    const rpp = state.rowsPerPage;
+    const start = state.page * rpp;
+    exportRows = filtered.slice(start, start + rpp);
+  }
+
+  const now = new Date().toISOString().replace(/[:.]/g, '-');
+  const baseName = `${state.currentLayout?.name || 'export'}-${now}`;
+
+  if (format === 'csv') {
+    const header = columns.map(c => escapeCsvCell(c.header)).join(',');
+    const lines = exportRows.map(r => columns.map(c => escapeCsvCell(r[c.key])).join(','));
+    const csv = '\uFEFF' + [header, ...lines].join('\r\n');
+    downloadBlob(baseName + '.csv', csv, 'text/csv;charset=utf-8;');
+    return;
+  }
+
+  if (format === 'excel') {
+    // Try to use SheetJS to generate a real .xlsx file. If not available, dynamically load it.
+    const generateXlsx = () => {
+      try {
+        const headers = columns.map(c => c.header);
+        const aoa = [headers];
+        for (const r of exportRows) {
+          aoa.push(columns.map(c => r[c.key] ?? ''));
+        }
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        XLSX.writeFile(wb, baseName + '.xlsx');
+        return true;
+      } catch (err) {
+        console.warn('SheetJS export failed, falling back to HTML .xls', err);
+        return false;
+      }
+    };
+
+    if (window.XLSX) {
+      if (generateXlsx()) return;
+    } else {
+      // Load SheetJS from CDN then generate
+      const s = document.createElement('script');
+      s.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+      s.onload = () => { if (generateXlsx()) return; else fallbackHtml(); };
+      s.onerror = () => { console.warn('Failed to load SheetJS, using HTML fallback'); fallbackHtml(); };
+      document.head.appendChild(s);
+      return;
+    }
+
+    // Fallback: Simple HTML table that Excel can open
+    function fallbackHtml() {
+      let html = '<meta http-equiv="content-type" content="text/html; charset=UTF-8"/>';
+      html += '<table><thead><tr>' + columns.map(c => `<th>${escapeHtml(c.header)}</th>`).join('') + '</tr></thead><tbody>';
+      for (const r of exportRows) {
+        html += '<tr>' + columns.map(c => `<td>${escapeHtml(String(r[c.key] ?? ''))}</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      downloadBlob(baseName + '.xls', html, 'application/vnd.ms-excel');
+    }
+    // Try fallback now if we reached here
+    fallbackHtml();
+    return;
+  }
+
+  if (format === 'json') {
+    const arr = exportRows.map(r => {
+      const obj = {};
+      for (const c of columns) obj[c.key] = r[c.key] ?? null;
+      return obj;
+    });
+    downloadBlob(baseName + '.json', JSON.stringify(arr, null, 2), 'application/json');
+    return;
+  }
+
+  if (format === 'md' || format === 'markdown') {
+    const hdr = '|' + columns.map(c => ` ${c.header} `).join('|') + '|';
+    const sep = '|' + columns.map(() => ' --- ').join('|') + '|';
+    const body = exportRows.map(r => '|' + columns.map(c => ` ${String(r[c.key] ?? '')} `).join('|') + '|').join('\n');
+    const md = [hdr, sep, body].join('\n');
+    downloadBlob(baseName + '.md', md, 'text/markdown;charset=utf-8');
+    return;
+  }
+}
+
+// ---- Filtering & sorting ----
+
+function getFilteredSortedRows(columns, rows) {
+  let filtered = rows;
+
+  // Global search
+  if (state.searchTerm) {
+    const lc = state.searchTerm.toLowerCase();
+    filtered = filtered.filter(row =>
+      columns.some(col => {
+        const val = row[col.key];
+        return val != null && String(val).toLowerCase().includes(lc);
+      })
+    );
+  }
+
+  // Per-column filters
+  for (const [key, filterVal] of Object.entries(state.columnFilters)) {
+    if (!filterVal) continue;
+    if (Array.isArray(filterVal)) {
+      if (filterVal.length === 0) continue;
+      const lcVals = filterVal.map(v => v.toLowerCase());
+      filtered = filtered.filter(row => {
+        const val = row[key];
+        return val != null && lcVals.includes(String(val).toLowerCase());
+      });
+    } else {
+      const lc = filterVal.toLowerCase();
+      filtered = filtered.filter(row => {
+        const val = row[key];
+        return val != null && String(val).toLowerCase().includes(lc);
+      });
+    }
+  }
+
+  // Sort
+  if (state.sortKey !== null) {
+    const key = state.sortKey;
+    const dir = state.sortAsc ? 1 : -1;
+    filtered = [...filtered].sort((a, b) => {
+      let va = a[key], vb = b[key];
+      if (va == null) va = '';
+      if (vb == null) vb = '';
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb), 'sv') * dir;
+    });
+  }
+
+  return filtered;
+}
+
+// ---- Render table ----
+
+// Track which filter input is focused for restoring after re-render
+let _focusedFilterKey = null;
+let _focusedFilterCursor = 0;
+let _lastRowCheckboxIndex = null;
+
+function renderTable(rawRows) {
+  const rows = applyJoins(rawRows);
+  const columns = getVisibleColumns();
+  const filtered = getFilteredSortedRows(columns, rows);
+  const rpp = state.rowsPerPage;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rpp));
+  if (state.page >= totalPages) state.page = totalPages - 1;
+
+  // Sync URL on every render (replaceState for filter/sort changes)
+  serializeStateToURL(false);
+
+  const start = state.page * rpp;
+  const pageRows = filtered.slice(start, start + rpp);
+
+  // Row count
+  const hasColumnFilters = Object.values(state.columnFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v);
+  const isFiltered = state.searchTerm || hasColumnFilters;
+  document.getElementById('row-count').textContent =
+    isFiltered ? `${filtered.length} av ${rows.length} rader` : `${rows.length} rader`;
+
+  // Show/hide clear filters button
+  const clearBtn = document.getElementById('clear-filters');
+  if (clearBtn) clearBtn.classList.toggle('visible', hasColumnFilters);
+
+  const wrapper = document.getElementById('table-wrapper');
+
+  if (columns.length === 0) {
+    wrapper.innerHTML = '<div class="empty-data">Inga kolumner synliga &mdash; välj kolumner via knappen ovan</div>';
+    renderPagination(1, rows);
+    return;
+  }
+
+  // Compute unique values per column (once per render)
+  const colUniques = {};
+  for (const col of columns) {
+    const seen = new Set();
+    // Use the already filtered rows so suggestions respect active filters/search
+    for (const row of rows) {
+      const v = row[col.key];
+      if (v != null && v !== '') seen.add(String(v));
+    }
+    colUniques[col.key] = [...seen].sort((a, b) => a.localeCompare(b, 'sv'));
+  }
+
+  // Build header cells
+  const theadCells = columns.map(col => {
+    const isSorted = state.sortKey === col.key;
+    const arrow = isSorted ? (state.sortAsc ? '▲' : '▼') : '↕';
+    const filterVal = state.columnFilters[col.key];
+    const uniques = colUniques[col.key];
+    const useSelect = uniques.length > 0 && uniques.length < 10;
+
+    let filterHtml;
+    if (useSelect) {
+      const selectedArr = Array.isArray(filterVal) ? filterVal : [];
+      const opts = uniques.map(v =>
+        `<option value="${escapeHtml(v)}" ${selectedArr.includes(v) ? 'selected' : ''}>${escapeHtml(v)}</option>`
+      ).join('');
+      filterHtml = `<select multiple size="1" data-key="${escapeHtml(col.key)}" class="${selectedArr.length ? 'has-value' : ''}">
+        ${opts}</select>`;
+    } else {
+      const dlId = `dl-${escapeHtml(col.key)}`;
+      const textVal = (typeof filterVal === 'string') ? filterVal : '';
+      const lc = textVal.toLowerCase();
+      const matching = lc
+        ? colUniques[col.key].filter(v => v.toLowerCase().includes(lc)).slice(0, 20)
+        : colUniques[col.key].slice(0, 20);
+      const dlOpts = matching.map(v => `<option value="${escapeHtml(v)}">`).join('');
+      filterHtml = `<input type="search" placeholder="Filter..." data-key="${escapeHtml(col.key)}"
+                     value="${escapeHtml(textVal)}" class="${textVal ? 'has-value' : ''}"
+                     list="${dlId}"><datalist id="${dlId}">${dlOpts}</datalist>`;
+    }
+
+    return `<th data-key="${escapeHtml(col.key)}" class="${isSorted ? 'sorted' : ''}" ${state.columnWidths[col.key] ? `style="width:${state.columnWidths[col.key]}px"` : ''}>
+      <div class="th-content">
+        <div class="th-label">
+          ${escapeHtml(col.header)} <span class="sort-arrow">${arrow}</span>
+        </div>
+        <div class="col-filter">${filterHtml}</div>
+      </div>
+      <div class="col-resize-handle" data-key="${escapeHtml(col.key)}"></div>
+    </th>`;
+  }).join('');
+
+  // Prepend a selection column header
+  const selectHeader = `<th class="select-col"><input type="checkbox" id="select-all-visible" title="Välj alla synliga på sidan"></th>`;
+
+  // Build body with selection checkbox per row
+  const tbodyHtml = pageRows.length > 0
+    ? pageRows.map(row => {
+        const id = row.id ?? '';
+        const selChecked = state.selectedRows.has(id) ? 'checked' : '';
+        const selectCell = `<td class="row-select"><input type="checkbox" class="row-checkbox" data-id="${escapeHtml(String(id))}" ${selChecked}></td>`;
+        const cells = columns.map(col => {
+          let val = row[col.key];
+          if (val === null || val === undefined) val = '';
+          return `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
+        }).join('');
+        return `<tr data-id="${escapeHtml(String(id))}">${selectCell}${cells}</tr>`;
+      }).join('')
+    : `<tr><td colspan="${columns.length + 1}" class="empty-data">Ingen data matchar filtret</td></tr>`;
+
+  wrapper.innerHTML = `<table><thead><tr>${selectHeader}${theadCells}</tr></thead><tbody>${tbodyHtml}</tbody></table>`;
+
+  // Selection checkbox handlers
+  const headerChk = wrapper.querySelector('#select-all-visible');
+  const rowChks = Array.from(wrapper.querySelectorAll('.row-checkbox'));
+  const pageIds = pageRows.map(r => r.id).filter(Boolean);
+  const allSelected = pageIds.length > 0 && pageIds.every(id => state.selectedRows.has(id));
+  if (headerChk) headerChk.checked = allSelected;
+
+  headerChk?.addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    for (const r of pageRows) {
+      if (!r.id) continue;
+      if (checked) state.selectedRows.add(r.id);
+      else state.selectedRows.delete(r.id);
+    }
+    renderTable(rows);
+  });
+  rowChks.forEach((cb, idx) => {
+    cb.addEventListener('click', (ev) => {
+      const id = cb.dataset.id;
+      if (!id) return;
+      console.log(ev.shiftKey)
+      // Gmail-like shift selection: select range between last and current checkbox.
+      if (ev.shiftKey && _lastRowCheckboxIndex !== null && _lastRowCheckboxIndex !== idx) {
+        const from = Math.min(_lastRowCheckboxIndex, idx);
+        const to = Math.max(_lastRowCheckboxIndex, idx);
+        console.log(from, to)
+        for (let i = from; i <= to; i++) {
+          const rcb = rowChks[i];
+          if (!rcb) continue;
+          const rid = rcb.dataset.id;
+          if (!rid) continue;
+          rcb.checked = cb.checked;
+          if (cb.checked) state.selectedRows.add(rid);
+          else state.selectedRows.delete(rid);
+        }
+      } else {
+        if (cb.checked) state.selectedRows.add(id);
+        else state.selectedRows.delete(id);
+      }
+
+      _lastRowCheckboxIndex = idx;
+      // update header checkbox
+      const nowPageIds = pageRows.map(r => r.id).filter(Boolean);
+      const nowAll = nowPageIds.length > 0 && nowPageIds.every(id => state.selectedRows.has(id));
+      const hdr = wrapper.querySelector('#select-all-visible');
+      if (hdr) hdr.checked = nowAll;
+    });
+  });
+
+  // --- Sort click handlers ---
+  wrapper.querySelectorAll('.th-label').forEach(label => {
+    label.addEventListener('click', () => {
+      const key = label.closest('th').dataset.key;
+      if (state.sortKey === key) {
+        state.sortAsc = !state.sortAsc;
+      } else {
+        state.sortKey = key;
+        state.sortAsc = true;
+      }
+      renderTable(rows);
+    });
+  });
+
+  // --- Per-column filter: text inputs ---
+  wrapper.querySelectorAll('.col-filter input').forEach(input => {
+    input.addEventListener('input', () => {
+      _focusedFilterKey = input.dataset.key;
+      _focusedFilterCursor = input.selectionStart || 0;
+      state.columnFilters[input.dataset.key] = input.value;
+      state.page = 0;
+      renderTable(rows);
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('focus', () => {
+      _focusedFilterKey = input.dataset.key;
+    });
+  });
+
+  // --- Per-column filter: select dropdowns ---
+  wrapper.querySelectorAll('.col-filter select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      _focusedFilterKey = sel.dataset.key;
+      const selected = [...sel.selectedOptions].map(o => o.value);
+      state.columnFilters[sel.dataset.key] = selected;
+      state.page = 0;
+      renderTable(rows);
+    });
+    sel.addEventListener('click', (e) => e.stopPropagation());
+    sel.addEventListener('mousedown', (e) => e.stopPropagation());
+  });
+
+  // Restore focus to the filter input that was being edited
+  if (_focusedFilterKey) {
+    const inp = wrapper.querySelector(`.col-filter input[data-key="${CSS.escape(_focusedFilterKey)}"]`);
+    if (inp && inp === inp.closest('.table-wrapper')?.querySelector(`.col-filter input[data-key="${CSS.escape(_focusedFilterKey)}"]`)) {
+      inp.focus();
+      try { inp.setSelectionRange(_focusedFilterCursor, _focusedFilterCursor); } catch {}
+    }
+  }
+
+  // --- Column drag-and-drop on table headers ---
+  setupHeaderDragDrop(wrapper, rows);
+
+  // --- Column resize ---
+  setupColumnResize(wrapper);
+
+  // --- Pagination ---
+  renderPagination(totalPages, rows);
+}
+
+// ---- Header drag-and-drop ----
+
+function setupHeaderDragDrop(wrapper, rows) {
+  let dragKey = null;
+
+  wrapper.querySelectorAll('th').forEach(th => {
+    // Make the label area the drag handle (not the filter input)
+    const labelEl = th.querySelector('.th-label');
+    if (!labelEl) return;
+
+    labelEl.setAttribute('draggable', 'true');
+
+    labelEl.addEventListener('dragstart', (e) => {
+      dragKey = th.dataset.key;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragKey);
+      requestAnimationFrame(() => th.style.opacity = '0.4');
+    });
+
+    labelEl.addEventListener('dragend', () => {
+      th.style.opacity = '';
+      wrapper.querySelectorAll('th').forEach(h => {
+        h.classList.remove('drag-over-left', 'drag-over-right');
+      });
+      dragKey = null;
+    });
+
+    th.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!dragKey || dragKey === th.dataset.key) return;
+      const rect = th.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      th.classList.remove('drag-over-left', 'drag-over-right');
+      if (e.clientX < midX) {
+        th.classList.add('drag-over-left');
+      } else {
+        th.classList.add('drag-over-right');
+      }
+    });
+
+    th.addEventListener('dragleave', () => {
+      th.classList.remove('drag-over-left', 'drag-over-right');
+    });
+
+    th.addEventListener('drop', (e) => {
+      e.preventDefault();
+      th.classList.remove('drag-over-left', 'drag-over-right');
+      const targetKey = th.dataset.key;
+      if (!dragKey || dragKey === targetKey) return;
+
+      const order = [...state.columnOrder];
+      const fromIdx = order.indexOf(dragKey);
+      const toIdx = order.indexOf(targetKey);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      const rect = th.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      order.splice(fromIdx, 1);
+      let insertIdx = order.indexOf(targetKey);
+      if (e.clientX >= midX) insertIdx += 1;
+      order.splice(insertIdx, 0, dragKey);
+
+      state.columnOrder = order;
+      // Update URL to reflect new column order immediately
+      serializeStateToURL(false);
+      dragKey = null;
+      _focusedFilterKey = null; // don't restore focus after drag
+      renderTable(rows);
+
+      // Sync picker if it's open
+      const dd = document.getElementById('col-picker-dropdown');
+      if (dd && dd.classList.contains('open')) renderColumnPicker(rows);
+    });
+  });
+}
+
+// ---- Column resize ----
+
+function setupColumnResize(wrapper) {
+  wrapper.querySelectorAll('.col-resize-handle').forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const th = handle.closest('th');
+      const key = handle.dataset.key;
+      const startX = e.clientX;
+      const startW = th.offsetWidth;
+      handle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMove = (ev) => {
+        const newW = Math.max(60, startW + (ev.clientX - startX));
+        th.style.width = newW + 'px';
+        state.columnWidths[key] = newW;
+      };
+
+      const onUp = () => {
+        handle.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
+// ---- Pagination ----
+
+function renderPagination(totalPages, rows) {
+  const pag = document.getElementById('pagination');
+  if (!pag) return;
+
+  const rppHtml = `
+    <div class="rows-per-page">
+      <span>Rader:</span>
+      <input type="text" id="rpp-input" value="${state.rowsPerPage}" list="rows-suggestions" inputmode="numeric">
+    </div>`;
+
+  if (totalPages <= 1) {
+    pag.innerHTML = rppHtml;
+    attachRppHandler(rows);
+    return;
+  }
+
+  pag.innerHTML = `
+    <button id="pg-first" ${state.page === 0 ? 'disabled' : ''}>&laquo;</button>
+    <button id="pg-prev" ${state.page === 0 ? 'disabled' : ''}>&lsaquo;</button>
+    <span class="page-info">Sida ${state.page + 1} av ${totalPages}</span>
+    <button id="pg-next" ${state.page >= totalPages - 1 ? 'disabled' : ''}>&rsaquo;</button>
+    <button id="pg-last" ${state.page >= totalPages - 1 ? 'disabled' : ''}>&raquo;</button>
+    ${rppHtml}
+  `;
+
+  document.getElementById('pg-first').onclick = () => { state.page = 0; renderTable(rows); };
+  document.getElementById('pg-prev').onclick = () => { state.page = Math.max(0, state.page - 1); renderTable(rows); };
+  document.getElementById('pg-next').onclick = () => { state.page = Math.min(totalPages - 1, state.page + 1); renderTable(rows); };
+  document.getElementById('pg-last').onclick = () => { state.page = totalPages - 1; renderTable(rows); };
+  attachRppHandler(rows);
+}
+
+function attachRppHandler(rows) {
+  const input = document.getElementById('rpp-input');
+  if (!input) return;
+
+  const apply = () => {
+    const val = parseInt(input.value, 10);
+    if (val > 0 && val !== state.rowsPerPage) {
+      state.rowsPerPage = val;
+      state.page = 0;
+      renderTable(rows);
+    } else if (!val || val <= 0) {
+      input.value = state.rowsPerPage;
+    }
+  };
+
+  input.addEventListener('change', apply);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); apply(); }
+  });
+}
+
+// ---- Utility ----
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ---- Join feature ----
+
+function getJoinedRows(rows) {
+  if (state.joins.length === 0) return rows;
+  return rows.map(row => {
+    const merged = { ...row };
+    for (const join of state.joins) {
+      const localVal = String(row[join.localKey] ?? '').toLowerCase();
+      if (!localVal) continue;
+      const match = join._lookup?.[localVal];
+      if (match) {
+        for (const col of join.remoteCols) {
+          const joinedKey = `_join_${join.layoutName}_${col}`;
+          merged[joinedKey] = match[col];
+        }
+      }
+    }
+    return merged;
+  });
+}
+
+function buildJoinLookup(join) {
+  const lookup = {};
+  if (!join.remoteData) return lookup;
+  for (const row of join.remoteData) {
+    const key = String(row[join.remoteKey] ?? '').toLowerCase();
+    if (key) lookup[key] = row;
+  }
+  return lookup;
+}
+
+function getJoinColumns() {
+  const cols = [];
+  for (const join of state.joins) {
+    for (const col of join.remoteCols) {
+      const joinedKey = `_join_${join.layoutName}_${col}`;
+      const metaCol = join.remoteMeta?.find(m => m.propertyName === col);
+      const header = metaCol ? `${metaCol.header} (${join.layoutName})` : `${col} (${join.layoutName})`;
+      cols.push({ key: joinedKey, header });
+    }
+  }
+  return cols;
+}
+
+function applyJoins(rows) {
+  // Rebuild lookups
+  for (const join of state.joins) {
+    join._lookup = buildJoinLookup(join);
+  }
+
+  // Add join columns to state if not already there
+  const joinCols = getJoinColumns();
+  for (const jc of joinCols) {
+    // Ensure join column metadata exists
+    if (!state.allColumns.find(c => c.key === jc.key)) {
+      state.allColumns.push(jc);
+    }
+    // Add to columnOrder only if not already present
+    if (!state.columnOrder.includes(jc.key)) {
+      state.columnOrder.push(jc.key);
+    }
+  }
+
+  // Remove columns from removed joins
+  const validJoinKeys = new Set(joinCols.map(c => c.key));
+  state.allColumns = state.allColumns.filter(c => !c.key.startsWith('_join_') || validJoinKeys.has(c.key));
+  state.columnOrder = state.columnOrder.filter(k => !k.startsWith('_join_') || validJoinKeys.has(k));
+  // Ensure columnOrder has no duplicates and preserves order
+  state.columnOrder = [...new Set(state.columnOrder)];
+
+  return getJoinedRows(rows);
+}
+
+// Highlight helpers for join UI
+function clearLocalColumnHighlight() {
+  const wrapper = document.getElementById('table-wrapper');
+  if (!wrapper) return;
+  wrapper.querySelectorAll('th.join-local-highlight, td.join-local-highlight').forEach(el => el.classList.remove('join-local-highlight'));
+}
+
+function highlightLocalColumn(key) {
+  clearLocalColumnHighlight();
+  if (!key) return;
+  const wrapper = document.getElementById('table-wrapper');
+  if (!wrapper) return;
+  const ths = Array.from(wrapper.querySelectorAll('th'));
+  const idx = ths.findIndex(th => th.dataset.key === key);
+  if (idx === -1) return;
+  const th = ths[idx];
+  if (th) th.classList.add('join-local-highlight');
+  const rows = wrapper.querySelectorAll('tbody tr');
+  rows.forEach(r => {
+    const td = r.children[idx];
+    if (td) td.classList.add('join-local-highlight');
+  });
+}
+
+function clearPreviewHighlight() {
+  const previewDiv = document.getElementById('join-remote-preview');
+  if (!previewDiv) return;
+  previewDiv.querySelectorAll('th.join-local-highlight, td.join-local-highlight').forEach(el => el.classList.remove('join-local-highlight'));
+}
+
+function highlightPreviewColumn(key) {
+  clearPreviewHighlight();
+  if (!key) return;
+  const previewDiv = document.getElementById('join-remote-preview');
+  if (!previewDiv) return;
+  const ths = Array.from(previewDiv.querySelectorAll('th'));
+  const idx = ths.findIndex(th => th.dataset.key === key);
+  if (idx === -1) return;
+  const th = ths[idx];
+  if (th) th.classList.add('join-local-highlight');
+  const rows = previewDiv.querySelectorAll('tbody tr');
+  rows.forEach(r => {
+    const td = r.children[idx];
+    if (td) td.classList.add('join-local-highlight');
+  });
+}
+
+async function loadRemoteComponent(layoutName, componentId) {
+  const cacheKey = `${layoutName}/${componentId}`;
+  if (state.joinCache[cacheKey]) return state.joinCache[cacheKey];
+  const result = await loadComponent(layoutName, componentId);
+  state.joinCache[cacheKey] = result;
+  return result;
+}
+
+function renderJoinPanel(baseRows, editIndex) {
+  const isEditing = typeof editIndex === 'number';
+  const editJoin = isEditing ? state.joins[editIndex] : null;
+  const panel = document.getElementById('join-panel');
+
+  // Get local columns for dropdown
+  const localCols = state.allColumns.filter(c => !c.key.startsWith('_join_'));
+
+  let html = `<h3>&#x1F517; Koppla data (Join)</h3>`;
+
+  // Config form
+  html += `<div class="join-config">
+    <label>Källa (layout)
+      <select id="join-layout">
+        <option value="">Välj layout...</option>
+        ${state.layouts.map(l => `<option value="${escapeHtml(l.name)}" ${editJoin && editJoin.layoutName === l.name ? 'selected' : ''}>${escapeHtml(l.title)} (${escapeHtml(l.name)})</option>`).join('')}
+      </select>
+    </label>
+    <label>Lokal nyckel
+      <select id="join-local-key">
+        <option value="">Välj kolumn...</option>
+        ${localCols.map(c => `<option value="${escapeHtml(c.key)}" ${editJoin && editJoin.localKey === c.key ? 'selected' : ''}>${escapeHtml(c.header)}</option>`).join('')}
+      </select>
+    </label>
+    <label>Fjärrnyckel
+      <select id="join-remote-key" ${isEditing ? '' : 'disabled'}>
+        <option value="">${isEditing ? 'Laddar...' : 'Ladda layout först...'}</option>
+      </select>
+    </label>
+    <label>Kolumner att hämta
+      <div id="join-remote-cols" class="join-col-picker" style="min-height:34px;"><span style="color:#999;font-size:11px;">${isEditing ? 'Laddar...' : 'Välj layout och nyckel först'}</span></div>
+    </label>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <button class="join-add-btn" id="join-add-btn">${isEditing ? 'Spara' : 'Lägg till'}</button>
+      ${isEditing ? '<button class="join-cancel-btn" id="join-cancel-btn">Avbryt</button>' : ''}
+    </div>
+  </div>
+  <div id="join-remote-preview" style="margin-top:8px;font-size:13px;color:var(--text);width:100%;"></div>
+  `;
+  if (isEditing) {
+    html += `<input type="hidden" id="join-edit-index" value="${editIndex}">`;
+  }
+
+  // Active joins
+  if (state.joins.length > 0) {
+    html += `<div class="active-joins">`;
+    for (let i = 0; i < state.joins.length; i++) {
+      const j = state.joins[i];
+      const localColMeta = localCols.find(c => c.key === j.localKey);
+      const localLabel = localColMeta ? localColMeta.header : j.localKey;
+      const remoteKeyMeta = j.remoteMeta?.find(x => x.propertyName === j.remoteKey);
+      const remoteKeyLabel = remoteKeyMeta ? remoteKeyMeta.header : j.remoteKey;
+      const colNames = j.remoteCols.map(c => {
+        const m = j.remoteMeta?.find(x => x.propertyName === c);
+        return m ? m.header : c;
+      }).join(', ');
+      html += `<div class="active-join-item ${isEditing && editIndex === i ? 'editing' : ''}">
+        <span class="join-desc"><strong>${escapeHtml(j.layoutName)}</strong> on ${escapeHtml(localLabel)} = ${escapeHtml(remoteKeyLabel)}</span>
+        <span class="join-cols">${escapeHtml(colNames)}</span>
+        <span class="join-btns">
+          <button class="join-edit-btn" data-index="${i}">Redigera</button>
+          <button class="join-remove-btn" data-index="${i}">Ta bort</button>
+        </span>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  panel.innerHTML = html;
+
+  // Clear any previous highlights when opening the panel
+  clearLocalColumnHighlight();
+
+  // Update the join button badge
+  const joinBtn = document.getElementById('join-btn');
+  joinBtn.classList.toggle('has-joins', state.joins.length > 0);
+
+  // --- Wire up events ---
+
+  let _remoteData = null;
+  let _remoteMeta = null;
+  let _remoteComponentId = null;
+
+  const layoutSel = document.getElementById('join-layout');
+  const localKeySel = document.getElementById('join-local-key');
+  const remoteKeySel = document.getElementById('join-remote-key');
+  const remoteColsDiv = document.getElementById('join-remote-cols');
+  const addBtn = document.getElementById('join-add-btn');
+  const cancelBtn = document.getElementById('join-cancel-btn');
+
+  // Helper: load remote layout columns into the dropdowns
+  async function loadRemoteCols(layoutName, preselectKey, preselectCols) {
+    remoteKeySel.disabled = true;
+    remoteKeySel.innerHTML = '<option value="">Laddar...</option>';
+    remoteColsDiv.innerHTML = '<span style="color:#999;font-size:11px;">Laddar...</span>';
+    _remoteData = null;
+    _remoteMeta = null;
+
+    if (!layoutName) {
+      remoteKeySel.innerHTML = '<option value="">Ladda layout först...</option>';
+      remoteColsDiv.innerHTML = '<span style="color:#999;font-size:11px;">Välj layout och nyckel först</span>';
+      return;
+    }
+
+    try {
+      const detail = await getLayoutDetailCached(layoutName);
+      const tabs = extractTabs(detail);
+      const compIds = [...new Set(tabs.map(t => t.componentId))];
+
+      if (compIds.length === 0) {
+        remoteKeySel.innerHTML = '<option value="">Ingen komponent hittades</option>';
+        return;
+      }
+
+      _remoteComponentId = compIds[0];
+      const { data, meta } = await loadRemoteComponent(layoutName, _remoteComponentId);
+      _remoteData = data;
+      _remoteMeta = meta;
+
+      let remoteCols = [];
+      if (meta && meta.length > 0) {
+        remoteCols = meta.map(m => ({ key: m.propertyName, header: m.header }));
+      } else if (data && data.length > 0) {
+        remoteCols = Object.keys(data[0]).map(k => ({ key: k, header: k }));
+      }
+
+      remoteKeySel.disabled = false;
+      remoteKeySel.innerHTML = '<option value="">Välj fjärrnyckel...</option>' +
+        remoteCols.map(c => `<option value="${escapeHtml(c.key)}" ${preselectKey === c.key ? 'selected' : ''}>${escapeHtml(c.header)} (${escapeHtml(c.key)})</option>`).join('');
+
+      const preselectSet = new Set(preselectCols || []);
+      remoteColsDiv.innerHTML = remoteCols.map(c =>
+        `<label><input type="checkbox" value="${escapeHtml(c.key)}" ${preselectSet.has(c.key) ? 'checked' : ''}> ${escapeHtml(c.header)} <span style="color:#999">(${escapeHtml(c.key)})</span></label>`
+      ).join('');
+
+      // Render a small preview of remote data for the selected layout
+      const previewDiv = document.getElementById('join-remote-preview');
+      const renderPreview = (colsToShow) => {
+        if (!previewDiv) return;
+        if (!_remoteData || !_remoteData.length) {
+          previewDiv.innerHTML = '<div style="color:#777;font-size:12px;">Ingen exempeldata hittades</div>';
+          return;
+        }
+        const showCols = (colsToShow && colsToShow.length) ? colsToShow : remoteCols.slice(0, Math.min(6, remoteCols.length)).map(c => c.key);
+        const headers = showCols.map(k => {
+          const m = _remoteMeta?.find(x => x.propertyName === k);
+          return m ? m.header : k;
+        });
+        const rowsToShow = _remoteData.slice(0, 5);
+        let ph = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Exempeldata från ' + escapeHtml(layoutName) + '</div>';
+        ph += '<div class="preview-table-wrap" style="overflow:auto;"><table class="join-remote-preview-table" style="border-collapse:collapse;font-size:12px;width:100%">';
+        ph += '<thead><tr>' + showCols.map(k => {
+          const m = _remoteMeta?.find(x => x.propertyName === k);
+          const label = m ? m.header : k;
+          return `<th data-key="${escapeHtml(k)}" style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">${escapeHtml(label)}</th>`;
+        }).join('') + '</tr></thead>';
+        ph += '<tbody>';
+        for (const r of rowsToShow) {
+          ph += '<tr>' + showCols.map(k => `<td data-key="${escapeHtml(k)}" style="padding:6px;border-bottom:1px solid var(--border);">${escapeHtml(String(r[k] ?? ''))}</td>`).join('') + '</tr>';
+        }
+        ph += '</tbody></table></div>';
+        previewDiv.innerHTML = ph;
+        // apply any active preview highlight (if remote key selected)
+        try { highlightPreviewColumn(remoteKeySel.value); } catch (err) {}
+      };
+
+      // Initial preview (no cols selected -> show first few)
+      renderPreview();
+
+      // Update preview when checkboxes change
+      remoteColsDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const selected = [...remoteColsDiv.querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
+          renderPreview(selected.length ? selected : null);
+          try { highlightPreviewColumn(remoteKeySel.value); } catch (err) {}
+        });
+      });
+
+    } catch (err) {
+      remoteKeySel.innerHTML = `<option value="">Fel: ${escapeHtml(err.message)}</option>`;
+    }
+  }
+
+  layoutSel.addEventListener('change', () => {
+    loadRemoteCols(layoutSel.value, null, null);
+  });
+
+  const isFormReady = () => {
+    return layoutSel.value && localKeySel.value && remoteKeySel.value && remoteColsDiv.querySelector('input:checked');
+  };
+
+
+
+  // If editing, pre-load remote columns for the current join
+  if (isEditing && editJoin) {
+    _remoteData = editJoin.remoteData;
+    _remoteMeta = editJoin.remoteMeta;
+    _remoteComponentId = editJoin.componentId;
+    loadRemoteCols(editJoin.layoutName, editJoin.remoteKey, editJoin.remoteCols);
+  }
+
+  // Highlight local column when the select gains focus / changes
+  localKeySel.addEventListener('focus', () => highlightLocalColumn(localKeySel.value));
+  localKeySel.addEventListener('change', () => highlightLocalColumn(localKeySel.value));
+  localKeySel.addEventListener('blur', () => clearLocalColumnHighlight());
+  // Highlight remote preview column when the remote key select gains focus / changes
+  remoteKeySel.addEventListener('focus', () => highlightPreviewColumn(remoteKeySel.value));
+  remoteKeySel.addEventListener('change', () => highlightPreviewColumn(remoteKeySel.value));
+  remoteKeySel.addEventListener('blur', () => clearPreviewHighlight());
+
+  addBtn.addEventListener('click', () => {
+    if (!isFormReady()) return;
+    const checkedCols = [...remoteColsDiv.querySelectorAll('input:checked')].map(cb => cb.value);
+    const join = {
+      layoutName: layoutSel.value,
+      componentId: _remoteComponentId,
+      localKey: localKeySel.value,
+      remoteKey: remoteKeySel.value,
+      remoteCols: checkedCols,
+      remoteData: _remoteData,
+      remoteMeta: _remoteMeta,
+    };
+    if (isEditing) {
+      state.joins[editIndex] = join;
+    } else {
+      state.joins.push(join);
+    }
+    renderJoinPanel(baseRows);
+    renderTable(baseRows);
+    // Persist join (and any new join columns) to the URL
+    serializeStateToURL(false);
+  });
+
+  // Cancel edit
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      renderJoinPanel(baseRows);
+    });
+  }
+
+  // Edit join buttons
+  panel.querySelectorAll('.join-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.index);
+      renderJoinPanel(baseRows, idx);
+    });
+  });
+
+  // Remove join buttons
+  panel.querySelectorAll('.join-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.index);
+      state.joins.splice(idx, 1);
+      renderJoinPanel(baseRows);
+      renderTable(baseRows);
+      // Persist removal to the URL (and remove join columns from order)
+      serializeStateToURL(false);
+    });
+  });
+}
+
+// ---- Init ----
+
+document.getElementById('sidebar-search').addEventListener('input', (e) => {
+  renderNav(e.target.value);
+});
+
+// Sidebar collapse toggle
+(function setupSidebarToggle() {
+  const handle = document.getElementById('sidebar-handle');
+  if (!handle) return;
+
+  function setCollapsed(collapsed) {
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    handle.setAttribute('aria-expanded', String(!collapsed));
+    try { localStorage.setItem('rekyl.sidebarCollapsed', collapsed ? '1' : '0'); } catch (err) {}
+  }
+
+  try {
+    const saved = localStorage.getItem('rekyl.sidebarCollapsed');
+    if (saved === '1') setCollapsed(true);
+  } catch (err) {}
+
+  handle.addEventListener('click', () => {
+    const collapsed = document.body.classList.contains('sidebar-collapsed');
+    setCollapsed(!collapsed);
+  });
+})();
+
+async function exportIndexedDbBackup() {
+  const db = await openIdb();
+  const storeNames = Array.from(db.objectStoreNames);
+  const stores = {};
+
+  for (const storeName of storeNames) {
+    stores[storeName] = await new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const keysReq = store.getAllKeys();
+      const valsReq = store.getAll();
+      let keys = null;
+      let values = null;
+
+      function done() {
+        if (keys && values) {
+          resolve({ keys, values });
+        }
+      }
+
+      keysReq.onsuccess = () => { keys = keysReq.result || []; done(); };
+      valsReq.onsuccess = () => { values = valsReq.result || []; done(); };
+      keysReq.onerror = () => reject(keysReq.error);
+      valsReq.onerror = () => reject(valsReq.error);
+    });
+  }
+
+  return {
+    exportedAt: new Date().toISOString(),
+    database: 'rekyl_live_db',
+    stores,
+  };
+}
+
+async function importIndexedDbBackup(backup) {
+  if (!backup || typeof backup !== 'object' || !backup.stores || typeof backup.stores !== 'object') {
+    throw new Error('Ogiltigt backupformat');
+  }
+
+  const db = await openIdb();
+  const targetStoreNames = Object.keys(backup.stores).filter(name => db.objectStoreNames.contains(name));
+  if (targetStoreNames.length === 0) {
+    throw new Error('Backupen innehåller inga kompatibla stores');
+  }
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(targetStoreNames, 'readwrite');
+
+    tx.onerror = () => reject(tx.error || new Error('Import transaction failed'));
+    tx.onabort = () => reject(tx.error || new Error('Import transaction aborted'));
+    tx.oncomplete = () => resolve(true);
+
+    for (const storeName of targetStoreNames) {
+      const storeData = backup.stores[storeName] || {};
+      const values = Array.isArray(storeData.values) ? storeData.values : [];
+      const keys = Array.isArray(storeData.keys) ? storeData.keys : [];
+
+      const store = tx.objectStore(storeName);
+      store.clear();
+
+      for (let i = 0; i < values.length; i++) {
+        const value = values[i];
+        // kv uses explicit keys, while stores with keyPath should not pass key argument.
+        if (store.keyPath == null) {
+          const key = keys[i];
+          if (key === undefined) {
+            throw new Error(`Saknar nyckel i store ${storeName} på index ${i}`);
+          }
+          store.put(value, key);
+        } else {
+          store.put(value);
+        }
+      }
+    }
+  });
+
+  // Refresh in-memory caches after restore to avoid stale views.
+  apiCache.layouts = null;
+  apiCache.details = {};
+  apiCache.componentToTab = {};
+}
+
+// Download full IndexedDB backup
+document.getElementById('backup-idb-btn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('backup-idb-status');
+  try {
+    if (statusEl) {
+      statusEl.style.display = 'inline';
+      statusEl.textContent = 'Skapar backup...';
+    }
+    const backup = await exportIndexedDbBackup();
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadBlob(`rekyl-indexeddb-backup-${stamp}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    if (statusEl) {
+      statusEl.textContent = 'Backup nedladdad';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 2200);
+    }
+  } catch (err) {
+    console.error('Failed to export IndexedDB backup', err);
+    if (statusEl) {
+      statusEl.style.display = 'inline';
+      statusEl.textContent = `Fel: ${err.message || err}`;
+    }
+  }
+});
+
+// Restore full IndexedDB backup from JSON file
+document.getElementById('restore-idb-btn').addEventListener('click', () => {
+  const fileInput = document.getElementById('restore-idb-file');
+  if (fileInput) fileInput.click();
+});
+
+document.getElementById('restore-idb-file').addEventListener('change', async (e) => {
+  const input = e.target;
+  const file = input.files && input.files[0];
+  const statusEl = document.getElementById('backup-idb-status');
+  if (!file) return;
+
+  try {
+    if (statusEl) {
+      statusEl.style.display = 'inline';
+      statusEl.textContent = 'Återställer backup...';
+    }
+
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    await importIndexedDbBackup(backup);
+
+    if (statusEl) {
+      statusEl.textContent = 'Backup återställd';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 2500);
+    }
+
+    // If currently on local IDB layout, refresh so restored rows appear immediately.
+    if (state.currentLayout && state.currentLayout._localStore) {
+      await selectLayout(state.currentLayout);
+    }
+  } catch (err) {
+    console.error('Failed to restore IndexedDB backup', err);
+    if (statusEl) {
+      statusEl.style.display = 'inline';
+      statusEl.textContent = `Restore-fel: ${err.message || err}`;
+    }
+  } finally {
+    // Reset file input so the same file can be selected again.
+    input.value = '';
+  }
+});
+
+// Clear API cache button
+document.getElementById('clear-cache-btn').addEventListener('click', async () => {
+  try {
+    await clearApiCache();
+    state.joinCache = {};
+    const el = document.getElementById('cache-status');
+    if (el) {
+      el.style.display = 'inline';
+      setTimeout(() => { el.style.display = 'none'; }, 2000);
+    }
+  } catch (err) {
+    console.error('Failed to clear cache', err);
+  }
+});
+
+window.addEventListener('popstate', async () => {
+  const saved = deserializeStateFromURL();
+  if (saved.layout) {
+    await restoreFromURL();
+  } else {
+    // No layout in URL — show welcome
+    state.currentLayout = null;
+    renderNav();
+    document.getElementById('page-title').textContent = 'Rekyl Data Viewer';
+    document.getElementById('page-subtitle').textContent = 'Välj en layout i sidomenyn';
+    document.getElementById('content').innerHTML = `
+      <div class="welcome">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+        </svg>
+        <p>Välj en layout i menyn till vänster för att visa data</p>
+      </div>`;
+  }
+});
+
+// ---- Batch assignment helpers ----
+// Utilities to batch-assign resources (salesmen) to orders or projects.
+// Usage examples (run in console):
+// 1) const ids = await getVisibleRowIds();
+// 2) const sales = await fetchSalesmenList(); // returns [{id, name}, ...]
+// 3) await batchAssignToResource(ids, { resourcetype: 7, tab: 267 }, '0_193');
+
+async function getVisibleRowIds() {
+  try {
+    // Visible means currently rendered rows on the table page.
+    const checkboxes = Array.from(document.querySelectorAll('#table-wrapper .row-checkbox'));
+    return checkboxes.map(cb => cb.dataset.id).filter(Boolean);
+  } catch (err) {
+    console.warn('getVisibleRowIds failed', err);
+    return [];
+  }
+}
+
+async function fetchSalesmenList() {
+  // Loads salesmanlist layout, finds first tab and returns rows
+  const layoutName = 'salesmanlist';
+  const detail = await getLayoutDetailCached(layoutName);
+  const tabs = extractTabs(detail);
+  if (!tabs || tabs.length === 0) throw new Error('No tabs found for salesmanlist');
+  const tab = tabs[0];
+  const { rows } = await getAllRows(tab.id, tab.componentId);
+  // return array of objects { id, name }
+  return (rows || []).map(r => ({ id: r.id, name: r.salesman_name || r.name || r.salesman_name }));
+}
+
+async function fetchFullProjectDetails(projectId) {
+  const fetcher = (typeof globalThis.topFetch === 'function') ? globalThis.topFetch : (url, options) => fetch(url, options);
+  const html = await fetcher(`https://app.rekyl.nu/8399/project.asp?embed=1&todo=fetch&id=${encodeURIComponent(projectId)}&rekylnocache=${Date.now()}`, {
+    credentials: 'include'
+  }).then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.text();
+  });
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const form = doc.body.querySelector('form#project');
+  if (!form) throw new Error(`Form #project saknas för projekt ${projectId}`);
+
+  const project = Object.fromEntries(new FormData(form));
+  project.id = Number(projectId);
+  project._fetchedAt = new Date().toISOString();
+  return project;
+}
+
+async function fetchFullOrderDetails(orderId) {
+  const fetcher = (typeof globalThis.topFetch === 'function') ? globalThis.topFetch : (url, options) => fetch(url, options);
+  const html = await fetcher(`https://app.rekyl.nu/8399/workorder.asp?embed=1&todo=fetch&id=${encodeURIComponent(orderId)}&rekylnocache=${Date.now()}`, {
+    credentials: 'include'
+  }).then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.text();
+  });
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const form = doc.body.querySelector('form#workorder') || doc.body.querySelector('form[name="workorder"]') || doc.body.querySelector('form');
+  if (!form) throw new Error(`Kunde inte hitta workorder-form för ${orderId}`);
+
+  const order = Object.fromEntries(new FormData(form));
+  order.id = Number(orderId);
+  order._fetchedAt = new Date().toISOString();
+  return order;
+}
+
+async function importSelectedFullProjects(projectIds, mode, onProgress) {
+  const importMode = (mode === 'update') ? 'update' : 'skip';
+  const results = { saved: [], skipped: [], failed: [] };
+  const total = projectIds.length;
+  let done = 0;
+  let idx = 0;
+  let active = 0;
+  const concurrency = 3;
+
+  return await new Promise((resolve) => {
+    function next() {
+      if (idx >= total && active === 0) {
+        resolve(results);
+        return;
+      }
+
+      while (active < concurrency && idx < total) {
+        const projectId = projectIds[idx++];
+        active++;
+
+        (async (currentProjectId) => {
+          try {
+            if (importMode === 'skip') {
+              const exists = await idbHasProject(currentProjectId);
+              if (exists) {
+                results.skipped.push(currentProjectId);
+                return;
+              }
+            }
+            const project = await fetchFullProjectDetails(currentProjectId);
+            const ok = await idbPutProject(project);
+            if (!ok) throw new Error('Kunde inte spara projekt i IndexedDB');
+            results.saved.push(currentProjectId);
+          } catch (err) {
+            results.failed.push({ id: currentProjectId, error: String(err) });
+          } finally {
+            done += 1;
+            active--;
+            try { if (typeof onProgress === 'function') onProgress(done, total, currentProjectId); } catch (err) {}
+            next();
+          }
+        })(projectId);
+      }
+    }
+
+    next();
+  });
+}
+
+async function importSelectedFullOrders(orderIds, mode, onProgress) {
+  const importMode = (mode === 'update') ? 'update' : 'skip';
+  const results = { saved: [], skipped: [], failed: [] };
+  const total = orderIds.length;
+  let done = 0;
+  let idx = 0;
+  let active = 0;
+  const concurrency = 3;
+
+  return await new Promise((resolve) => {
+    function next() {
+      if (idx >= total && active === 0) {
+        resolve(results);
+        return;
+      }
+
+      while (active < concurrency && idx < total) {
+        const orderId = orderIds[idx++];
+        active++;
+
+        (async (currentOrderId) => {
+          try {
+            if (importMode === 'skip') {
+              const exists = await idbHasOrder(currentOrderId);
+              if (exists) {
+                results.skipped.push(currentOrderId);
+                return;
+              }
+            }
+            const order = await fetchFullOrderDetails(currentOrderId);
+            const ok = await idbPutOrder(order);
+            if (!ok) throw new Error('Kunde inte spara order i IndexedDB');
+            results.saved.push(currentOrderId);
+          } catch (err) {
+            results.failed.push({ id: currentOrderId, error: String(err) });
+          } finally {
+            done += 1;
+            active--;
+            try { if (typeof onProgress === 'function') onProgress(done, total, currentOrderId); } catch (err) {}
+            next();
+          }
+        })(orderId);
+      }
+    }
+
+    next();
+  });
+}
+
+async function batchAssignToResource(resourceIds, opts, salesmanPrefixedId) {
+  // opts: { resourcetype: number, tab: number }
+  if (!Array.isArray(resourceIds)) throw new Error('resourceIds must be an array');
+  if (!opts || !opts.resourcetype || !opts.tab) throw new Error('opts must contain resourcetype and tab');
+
+  const concurrency = (opts.concurrency && Number(opts.concurrency) > 0) ? Number(opts.concurrency) : 4;
+  const total = resourceIds.length;
+  const results = { success: [], failed: [] };
+  let idx = 0;
+  let active = 0;
+
+  const fetcher = (typeof globalThis.topFetch === 'function') ? globalThis.topFetch : (u, o) => fetch(u, o);
+
+  return await new Promise((resolve) => {
+    function next() {
+      if (idx >= total && active === 0) {
+        resolve(results);
+        return;
+      }
+      while (active < concurrency && idx < total) {
+        const resId = resourceIds[idx++];
+        active++;
+        (async (rid) => {
+          try {
+            const url = `https://app.rekyl.nu/8399/scheme.asp?show=schemelist&resourcetype=${encodeURIComponent(opts.resourcetype)}&resource=${encodeURIComponent(rid)}&tab=${encodeURIComponent(opts.tab)}&todo=addlistresource&id=${encodeURIComponent(salesmanPrefixedId)}`;
+            const r = await fetcher(url, { credentials: 'include' });
+            if (r && r.ok) {
+              results.success.push({ resource: rid, status: r.status });
+            } else {
+              const text = r ? await r.text().catch(() => '') : '';
+              results.failed.push({ resource: rid, status: r ? r.status : 'no-response', body: text });
+            }
+          } catch (err) {
+            results.failed.push({ resource: rid, error: String(err) });
+          } finally {
+            active--;
+            // progress callback: try to call opts._onProgress if provided
+            try { if (typeof opts._onProgress === 'function') opts._onProgress(results.success.length + results.failed.length, total, rid); } catch (e) {}
+            next();
+          }
+        })(resId);
+      }
+    }
+    next();
+  });
+}
+
+async function batchAssignSelectedToSalesman(salesmanIdNumber, opts) {
+  // salesmanIdNumber: numeric id from salesmanlist (e.g. 193). opts: { resourcetype, tab }
+  const pref = `0_${salesmanIdNumber}`;
+  const ids = await getVisibleRowIds();
+  return batchAssignToResource(ids, opts, pref);
+}
+</script>
+
+</body>
+</html>
+
+
+<!-- qs green, javid, tayyved -->
+<!--
+https://app.rekyl.nu/8399/option.asp?
+objid=int_keytype&show=ajaxvalue&property=keycard_keytype&field=keycardlist_int_keytype&tab=21
+objid=int_status&show=ajaxvalue&property=keycard_status&field=keycardlist_int_status&tab=21
+objid=int_status&show=ajaxvalue&property=salesman_status&field=salesmanlist_int_status&tab=28
+objid=int_category&show=ajaxobjecttree&property=keycard_category&field=keycardlist_int_category&tab=21
+objid=int_office&show=ajaxoffice&field=keycardlist_int_office&tab=21
+objid=int_manager&noall=1&zeroemptyvalue=1&show=ajaxmanager&field=workorder_int_manager&tab=61 -->
