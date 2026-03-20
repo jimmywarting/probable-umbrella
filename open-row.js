@@ -70,7 +70,7 @@
     dialog.showModal()
     dialog.addEventListener('close', () => dialog.remove())
 
-    // Column resize (JS)
+    // Column resize
     const colResizer = dialog.querySelector('#colResizer')
     const bottomRow = dialog.querySelector('#bottomRow')
     let isCol = false
@@ -97,27 +97,26 @@
     resizeObserver.observe(topRow)
   }
 
-  // Lyssna på ctrl/cmd + vänsterklick eller mittenmus
+  // Lägg till knapp i första kolumn
   document.querySelectorAll('table tr').forEach(tr => {
-    tr.addEventListener('mousedown', e => {
-      const isCtrlClick = (e.button === 0 && (e.ctrlKey || e.metaKey))
-      const isMiddleClick = e.button === 1
+    const firstTd = tr.querySelector('td:first-child')
+    if (!firstTd) return
 
-      if (!isCtrlClick && !isMiddleClick) return
+    const orderId = tr.querySelector('[data-label="Order"]')?.innerText.trim()
+    const projectId = tr.querySelector('[data-label="Projekt"]')?.innerText.trim()
+    if (!orderId || !projectId) return
+    const int_project1 = projectId.slice(0,3)
+    const int_project2 = projectId.slice(3)
 
-      e.preventDefault()
-      // remove selected class from any previously selected tr
-      document.querySelectorAll('table tr.selected').forEach(row => row.classList.remove('selected'))
-
-      // add selected class to tr
-      tr.classList.add('selected')
-      const orderId = tr.querySelector('[data-label="Order"]')?.innerText.trim()
-      const projectId = tr.querySelector('[data-label="Projekt"]')?.innerText.trim()
-      if (!orderId || !projectId) return
-      const int_project1 = projectId.slice(0,3)
-      const int_project2 = projectId.slice(3)
-
+    const btn = document.createElement('button')
+    btn.innerHTML = '🔍' // ikon, du kan byta mot svg om du vill
+    btn.title = 'Öppna dialog'
+    btn.style.marginRight = '6px'
+    btn.onclick = e => {
+      e.stopPropagation()
       openRekylDialog({ orderId, projectId, int_project1, int_project2 })
-    })
+    }
+
+    firstTd.prepend(btn)
   })
 })()
