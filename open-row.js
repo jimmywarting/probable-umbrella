@@ -43,7 +43,7 @@
             </div>
             <div class="rekyl-section">
               <h3>Leverantörsfakturor</h3>
-              <iframe src="https://app.rekyl.nu/8399/preinvoice.asp?show=summarysupplierinvoice&fromproject=1&str_project=${projectId}&int_project0=${projectId}&int_project1=${int_project1}&int_project2=${int_project2}&int_company=2&workorder_id=${orderId}&int_debitmethod=0&int_tab=307"></iframe>
+              <iframe src="https://app.rekyl.nu/8399/preinvoice.asp?show=summarysupplierinvoice&fromproject=1&str_project=${projectId}&int_project0=26&int_project1=${int_project1}&int_project2=${int_project2}&int_company=2&workorder_id=${orderId}&int_debitmethod=0&int_tab=307"></iframe>
             </div>
           </div>
 
