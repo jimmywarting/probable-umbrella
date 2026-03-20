@@ -106,7 +106,11 @@
       if (!isCtrlClick && !isMiddleClick) return
 
       e.preventDefault()
+      // remove selected class from any previously selected tr
+      document.querySelectorAll('table tr.selected').forEach(row => row.classList.remove('selected'))
 
+      // add selected class to tr
+      tr.classList.add('selected')
       const orderId = tr.querySelector('[data-label="Order"]')?.innerText.trim()
       const projectId = tr.querySelector('[data-label="Projekt"]')?.innerText.trim()
       if (!orderId || !projectId) return
