@@ -57,7 +57,7 @@
 
             <div class="rekyl-section" id="summarySection">
               <h3>Slutsummering</h3>
-              <iframe src="https://app.rekyl.nu/8399/preinvoice.asp?show=summaryfinal&fromproject=1&calculusmode=0&str_project=${projectId}&int_project0=${projectId}&int_project1=${int_project1}&int_project2=${int_project2}&int_company=2&workorder_id=${orderId}&int_price=0&int_debitmethod=0&datefrom=&dateto=&int_tab=4449"></iframe>
+              <iframe src="https://app.rekyl.nu/8399/preinvoice.asp?show=summaryfinal&fromproject=1&calculusmode=0&str_project=${projectId}&int_project0=26&int_project1=${int_project1}&int_project2=${int_project2}&int_company=2&workorder_id=${orderId}&int_price=0&int_debitmethod=0&datefrom=&dateto=&int_tab=4449"></iframe>
             </div>
           </div>
         </div>
