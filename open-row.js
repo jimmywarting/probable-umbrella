@@ -50,7 +50,7 @@
           <div class="row bottom" id="bottomRow">
             <div class="rekyl-section" id="orderSection">
               <h3>Order</h3>
-              <iframe src="https://app.rekyl.nu/v5/8399/page/workorderlist/details/workorder/${orderId}></iframe>
+              <iframe src="https://app.rekyl.nu/v5/8399/page/workorderlist/details/workorder/${orderId}"></iframe>
             </div>
 
             <div class="col-resize" id="colResizer"></div>
